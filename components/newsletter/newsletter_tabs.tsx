@@ -8,6 +8,7 @@ import Emails from "./emails";
 interface NewsletterTabsProps {
   organizationName: string;
   organizationId: string;
+  organizationSlug: string;
   events: any[]; // Replace with actual type
   users: any[]; // Replace with actual type
   sentEmails: any[]; // Replace with Email type
@@ -21,6 +22,7 @@ function classNames(...classes: string[]) {
 const NewsletterTabs: React.FC<NewsletterTabsProps> = ({
   organizationName,
   organizationId,
+  organizationSlug,
   events,
   users,
   sentEmails,
@@ -60,6 +62,7 @@ const NewsletterTabs: React.FC<NewsletterTabsProps> = ({
             <NewsletterCreation
               organizationName={organizationName}
               organizationId={organizationId}
+              organizationSlug={organizationSlug}
               events={events}
               users={users}
             />

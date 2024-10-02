@@ -13,6 +13,7 @@ export interface OutgoingAttachment {
 }
 
 export interface Email {
+  organizationId(arg0: string, organizationId: any): unknown;
   id: string; // Unique identifier for the email
   from: string; // Sender's email address
   to: string[]; // Array of receiver email addresses

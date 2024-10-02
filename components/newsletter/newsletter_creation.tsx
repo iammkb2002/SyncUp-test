@@ -1,5 +1,3 @@
-// File: src/components/NewsletterCreation.tsx
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -14,12 +12,15 @@ import axios from "axios";
 import { useDropzone } from "react-dropzone";
 import { fetchMembersByEvent, check_permissions } from "@/lib/newsletter_actions";
 import { useUser } from "@/context/user_context";
+import Swal from "sweetalert2";
+import Preloader from "@/components/preloader";
 
 const RichTextEditor = dynamic(() => import("@mantine/rte"), { ssr: false });
 
 interface NewsletterCreationProps {
   organizationName: string;
   organizationId: string;
+  organizationSlug: string;
   events: Event[];
   users: CombinedUserData[];
 }
@@ -38,20 +39,24 @@ const customStyles: TableStyles = {
     style: {
       tableLayout: "fixed",
       width: "100%",
+      backgroundColor: "transparent",
     },
   },
   headRow: {
     style: {
-      backgroundColor: "#333333",
-      color: "#ffffff",
+      backgroundColor: "#212121", // Customize the header row background color
+      color: "#ffffff", // Customize the header row text color
     },
   },
   headCells: {
     style: {
-      color: "#ffffff",
+      color: "#ffffff", // Customize the header cell text color
       whiteSpace: "nowrap",
       overflow: "hidden",
       textOverflow: "ellipsis",
+      padding: "8px",
+      backgroundColor: "#212121", // Customize the header cell background color
+      borderRadius: "8px",
     },
   },
   cells: {
@@ -59,25 +64,26 @@ const customStyles: TableStyles = {
       whiteSpace: "nowrap",
       overflow: "hidden",
       textOverflow: "ellipsis",
+      padding: "8px",
+      backgroundColor: "transparent",
     },
   },
   rows: {
     style: {
-      backgroundColor: "#2a2a2a",
+      backgroundColor: "transparent",
       color: "#ffffff",
-      "&:hover": { backgroundColor: "#3e3e3e" },
     },
   },
   pagination: {
     style: {
-      backgroundColor: "#1f1f1f",
+      backgroundColor: "transparent",
       color: "#ffffff",
       justifyContent: "center",
     },
   },
   noData: {
     style: {
-      backgroundColor: "#1f1f1f",
+      backgroundColor: "transparent",
       color: "#ffffff",
     },
   },
@@ -86,42 +92,53 @@ const customStyles: TableStyles = {
 const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
   organizationName,
   organizationId,
+  organizationSlug,
   events,
   users,
 }) => {
   const { user } = useUser();
 
-  // Call Hooks unconditionally
   const [hasPermission, setHasPermission] = useState(false);
+  const [checkingPermission, setCheckingPermission] = useState(true); // New state for loading
   const [editorState, setEditorState] = useState("");
   const [subject, setSubject] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<CombinedUserData[]>([]);
   const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [validationErrors, setValidationErrors] = useState<string | null>(null);
   const [eventsSearch, setEventsSearch] = useState("");
   const [usersSearch, setUsersSearch] = useState("");
 
-  // Ensure useDropzone is called on every render
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => setAttachments((prev) => [...prev, ...acceptedFiles]),
   });
 
   useEffect(() => {
     async function checkUserPermissions() {
+      setCheckingPermission(true); // Start loading
       console.log("Checking user permissions... ", user?.id, organizationId);
-      const permission = await check_permissions(
-        organizationId,
-        "send_newsletters",
-        user?.id || ""
-      );
-      setHasPermission(permission);
-      console.log("User has permission to send newsletters: ", permission);
+      try {
+        const permission = await check_permissions(
+          organizationId,
+          "send_newsletters",
+          user?.id || ""
+        );
+        setHasPermission(permission);
+        console.log("User has permission to send newsletters: ", permission);
+      } catch (error) {
+        console.error("Error checking permissions:", error);
+        setHasPermission(false);
+      } finally {
+        setCheckingPermission(false); // End loading
+      }
     }
-    checkUserPermissions();
+
+    if (user && organizationId) {
+      checkUserPermissions();
+    } else {
+      setHasPermission(false);
+      setCheckingPermission(false);
+    }
   }, [user, organizationId]);
 
   const removeAttachment = (index: number) => {
@@ -134,15 +151,18 @@ const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
       newsletterSchema.parse(formData);
 
       if (selectedUsers.length === 0 && selectedEvents.length === 0) {
-        setValidationErrors("At least one recipient is required");
+        Swal.fire("Error", "At least one recipient is required", "error");
         return false;
       }
 
-      setValidationErrors(null);
       return true;
     } catch (err) {
       if (err instanceof z.ZodError) {
-        setValidationErrors(err.errors.map((e) => e.message).join(", "));
+        Swal.fire(
+          "Validation Error",
+          err.errors.map((e) => e.message).join(", "),
+          "error"
+        );
       }
       return false;
     }
@@ -152,8 +172,6 @@ const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
     if (!validateForm()) return;
 
     setSending(true);
-    setSuccessMessage(null);
-    setErrorMessage(null);
     try {
       const selectedEventUsers = await Promise.all(
         selectedEvents.map((event) => fetchMembersByEvent(event.eventid))
@@ -165,13 +183,14 @@ const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
       );
 
       if (uniqueUsers.length === 0) {
-        setErrorMessage("At least one recipient is required.");
+        Swal.fire("Error", "At least one recipient is required.", "error");
+        setSending(false);
         return;
       }
 
       const formData = new FormData();
       formData.append("fromName", organizationName);
-      formData.append("replyToExtension", organizationId);
+      formData.append("replyToExtension", organizationSlug);
       formData.append("recipients", JSON.stringify(uniqueUsers.map((u) => u.email)));
       formData.append("subject", subject);
       formData.append("message", editorState);
@@ -186,17 +205,21 @@ const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
       );
 
       if (response.status === 200) {
-        setSuccessMessage("Newsletter sent successfully!");
+        Swal.fire("Success", "Newsletter sent successfully!", "success");
         setAttachments([]);
         setSubject("");
         setEditorState("");
         setSelectedUsers([]);
         setSelectedEvents([]);
       } else {
-        setErrorMessage("Failed to send newsletter.");
+        Swal.fire("Error", "Failed to send newsletter.", "error");
       }
     } catch (error: any) {
-      setErrorMessage(error.response?.data?.message || "Failed to send newsletter.");
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "Failed to send newsletter.",
+        "error"
+      );
     } finally {
       setSending(false);
     }
@@ -208,21 +231,21 @@ const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
       selector: (row: Event) => row.title,
       sortable: true,
       id: "title",
-      width: "200px",
+      width: "150px",
     },
     {
       name: "Location",
       selector: (row: Event) => row.location,
       sortable: true,
       id: "location",
-      width: "150px",
+      width: "120px",
     },
     {
       name: "Date",
-      selector: (row: Event) => new Date(row.starteventdatetime).toLocaleString(),
+      selector: (row: Event) => new Date(row.starteventdatetime).toLocaleDateString(),
       sortable: true,
       id: "startDate",
-      width: "180px",
+      width: "140px",
     },
   ];
 
@@ -232,21 +255,21 @@ const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
       selector: (row: CombinedUserData) => row.email || "",
       sortable: true,
       id: "email",
-      width: "250px",
+      width: "200px",
     },
     {
       name: "First Name",
       selector: (row: CombinedUserData) => row.first_name || "",
       sortable: true,
       id: "firstName",
-      width: "150px",
+      width: "120px",
     },
     {
       name: "Last Name",
       selector: (row: CombinedUserData) => row.last_name || "",
       sortable: true,
       id: "lastName",
-      width: "150px",
+      width: "120px",
     },
   ];
 
@@ -265,190 +288,216 @@ const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
   }, [users, usersSearch]);
 
   return (
-    <div className="p-6 bg-[#1f1f1f] rounded-lg shadow-lg max-w-4xl mx-auto">
-      {/* Conditionally render the permission message */}
-      {!hasPermission ? (
-        <div className="text-red-500 text-center text-xl font-semibold">
+    <div className="mx-auto max-w-6xl rounded-lg bg-[#1f1f1f] p-4 shadow-lg">
+      {checkingPermission ? (
+        <Preloader />
+      ) : !hasPermission ? (
+        <div className="text-center text-lg font-semibold text-red-500">
           You do not have permission to send newsletters.
         </div>
       ) : (
         <>
-          <input
-            className="w-full mb-6 p-4 rounded-lg border bg-charleston text-base text-white placeholder-gray-400 focus:border-primary focus:ring focus:ring-primary-light"
-            type="text"
-            placeholder="Subject*"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-          />
-  
-          <RichTextEditor
-            value={editorState}
-            onChange={setEditorState}
-            className="rounded-lg border border-primary text-white p-4"
-            styles={{
-              root: {
-                backgroundColor: "#2a2a2a",
-                color: "#ffffff",
-                "&:hover": {
-                  backgroundColor: "#3a3a3a",
-                },
-              },
-              toolbar: { backgroundColor: "#2a2a2a", borderColor: "#444444" },
-              toolbarControl: {
-                backgroundColor: "#2a2a2a",
-                "&:hover": {
-                  backgroundColor: "#3a3a3a",
-                },
-              },
-            }}
-          />
-  
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold text-white">Attachments</h2>
-            <div
-              {...getRootProps()}
-              className={`mt-4 cursor-pointer rounded-lg border-2 border-dashed p-6 text-center text-gray-400 ${
-                isDragActive ? "border-primary text-primary" : "border-gray-500"
-              }`}
-            >
-              <input {...getInputProps()} />
-              {isDragActive ? (
-                <p>Drop the files here ...</p>
-              ) : (
-                <p>Drag & drop some files here, or click to select files</p>
-              )}
-            </div>
-  
-            {attachments.length > 0 && (
-              <div className="mt-4">
-                <h3 className="text-lg font-medium text-white">Selected Attachments:</h3>
-                <ul className="mt-2 space-y-2">
-                  {attachments.map((file, index) => (
-                    <li key={index} className="flex justify-between items-center p-2 rounded bg-gray-700">
-                      <span className="text-white">{file.name}</span>
-                      <button
-                        onClick={() => removeAttachment(index)}
-                        className="text-red-500 hover:text-red-700"
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="flex flex-col space-y-4">
+              <input
+                className="focus:ring-primary-light w-full rounded border bg-charleston p-3 text-sm text-white placeholder-gray-400 border-primary focus:ring"
+                type="text"
+                placeholder="Subject*"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+              />
+              <RichTextEditor
+                value={editorState}
+                onChange={setEditorState}
+                className="h-40 rounded border border-primary text-white"
+                styles={{
+                  root: {
+                    backgroundColor: "#2a2a2a",
+                    color: "#ffffff",
+                  },
+                  toolbar: {
+                    backgroundColor: "#2a2a2a",
+                    borderColor: "#444444",
+                  },
+                  toolbarControl: {
+                    backgroundColor: "#2a2a2a",
+                    "&:hover": { backgroundColor: "#3a3a3a" },
+                  },
+                }}
+              />
+              <div>
+                <div
+                  {...getRootProps()}
+                  className={`mt-2 cursor-pointer rounded border-2 border-dashed p-4 text-center text-sm text-gray-400 ${
+                    isDragActive ? "border-primary text-primary" : "border-gray-500"
+                  }`}
+                >
+                  <input {...getInputProps()} />
+                  <p>
+                    {isDragActive
+                      ? "Drop the files here..."
+                      : "Drag & drop files here, or click to select files"}
+                  </p>
+                </div>
+                {attachments.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {attachments.map((file, index) => (
+                      <li
+                        key={index}
+                        className="flex items-center justify-between rounded bg-charleston p-2"
                       >
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        <span className="text-sm text-white">{file.name}</span>
+                        <button
+                          onClick={() => removeAttachment(index)}
+                          className="text-xs text-red-500 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            )}
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={handleSendNewsletter}
+                  className="hover:bg-primary-dark focus:ring-primary-light w-40 rounded bg-primary py-2 text-sm text-white focus:outline-none focus:ring disabled:opacity-50"
+                  disabled={sending}
+                >
+                  {sending ? "Sending..." : "Send Newsletter"}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col space-y-4 rounded-lg bg-[#2a2a2a] p-4">
+              <h2 className="text-lg font-semibold text-white">Select Recipients</h2>
+              <Disclosure>
+                {({ open }) => (
+                  <>
+                    <Disclosure.Button className="flex w-full items-center justify-between rounded bg-[#333333] px-3 py-2 text-left text-sm font-medium text-white focus:outline-none focus-visible:ring focus-visible:ring-opacity-75">
+                      <span>Events</span>
+                      {open ? (
+                        <ChevronUpIcon className="h-4 w-4 text-white" />
+                      ) : (
+                        <ChevronDownIcon className="h-4 w-4 text-white" />
+                      )}
+                    </Disclosure.Button>
+                    <Disclosure.Panel className="mt-2 space-y-2">
+                      {events.length > 0 && (
+                        <div className="relative border-b-2">
+                          <svg
+                            className="absolute right-2 top-1/2 h-5 w-5 -translate-y-1/2 transform text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M21 21l-4.35-4.35m1.35-5.65a7 7 0 11-14 0 7 7 0 0114 0z"
+                            ></path>
+                          </svg>
+                          <input
+                            type="text"
+                            placeholder="Search Events..."
+                            value={eventsSearch}
+                            onChange={(e) => setEventsSearch(e.target.value)}
+                            className="w-full border-gray-500 border-transparent bg-charleston p-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-0"
+                          />
+                        </div>
+                      )}
+                      <div className="overflow-x-auto">
+                        <DataTable
+                          keyField="eventid"
+                          columns={eventColumns}
+                          data={filteredEvents}
+                          selectableRows
+                          onSelectedRowsChange={(state) =>
+                            setSelectedEvents(state.selectedRows)
+                          }
+                          pagination
+                          fixedHeader
+                          fixedHeaderScrollHeight="200px"
+                          customStyles={customStyles}
+                          noDataComponent={
+                            <div className="text-center">No events found.</div>
+                          }
+                          defaultSortFieldId="startDate"
+                          defaultSortAsc={false}
+                        />
+                      </div>
+                    </Disclosure.Panel>
+                  </>
+                )}
+              </Disclosure>
+              <Disclosure>
+                {({ open }) => (
+                  <>
+                    <Disclosure.Button className="flex w-full items-center justify-between rounded bg-[#333333] px-3 py-2 text-left text-sm font-medium text-white focus:outline-none focus-visible:ring focus-visible:ring-opacity-75">
+                      <span>Individual Users</span>
+                      {open ? (
+                        <ChevronUpIcon className="h-4 w-4 text-white" />
+                      ) : (
+                        <ChevronDownIcon className="h-4 w-4 text-white" />
+                      )}
+                    </Disclosure.Button>
+                    <Disclosure.Panel className="mt-2 space-y-2">
+                      {users.length > 0 && (
+                        <div className="relative border-b-2">
+                          <svg
+                            className="absolute right-2 top-1/2 h-5 w-5 -translate-y-1/2 transform text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M21 21l-4.35-4.35m1.35-5.65a7 7 0 11-14 0 7 7 0 0114 0z"
+                            ></path>
+                          </svg>
+                          <input
+                            type="text"
+                            placeholder="Search Users..."
+                            value={usersSearch}
+                            onChange={(e) => setUsersSearch(e.target.value)}
+                            className="w-full border-gray-500 border-transparent bg-charleston p-2 text-sm text-white placeholder-gray-400 focus:border-primary focus:ring-0"
+                          />
+                        </div>
+                      )}
+                      <div className="overflow-x-auto">
+                        <DataTable
+                          keyField="email"
+                          columns={userColumns}
+                          data={filteredUsers}
+                          selectableRows
+                          onSelectedRowsChange={(state) =>
+                            setSelectedUsers(state.selectedRows)
+                          }
+                          pagination
+                          fixedHeader
+                          fixedHeaderScrollHeight="200px"
+                          customStyles={customStyles}
+                          noDataComponent={
+                            <div className="text-center">No users found.</div>
+                          }
+                          defaultSortFieldId="email"
+                          defaultSortAsc={false}
+                        />
+                      </div>
+                    </Disclosure.Panel>
+                  </>
+                )}
+              </Disclosure>
+            </div>
           </div>
-  
-          <h2 className="mt-10 text-2xl text-white border-b-2 border-primary pb-2">Select Recipients</h2>
-  
-          <Disclosure>
-            {({ open }) => (
-              <>
-                <Disclosure.Button className="flex justify-between w-full px-4 py-2 mt-4 text-left text-lg font-medium rounded-lg bg-[#333333] text-white focus:outline-none focus-visible:ring focus-visible:ring-opacity-75">
-                  <span>Events</span>
-                  {open ? (
-                    <ChevronUpIcon className="w-5 h-5 text-white" />
-                  ) : (
-                    <ChevronDownIcon className="w-5 h-5 text-white" />
-                  )}
-                </Disclosure.Button>
-                <Disclosure.Panel className="px-4 pb-4 pt-4 text-sm text-gray-400">
-                  <input
-                    type="text"
-                    placeholder="Search Events..."
-                    value={eventsSearch}
-                    onChange={(e) => setEventsSearch(e.target.value)}
-                    className="mb-4 w-full rounded-lg border bg-charleston p-2 text-base text-white focus:border-primary"
-                  />
-                  <div className="overflow-x-auto">
-                    <DataTable
-                      keyField="eventid"
-                      columns={eventColumns}
-                      data={filteredEvents}
-                      selectableRows
-                      onSelectedRowsChange={(state) => setSelectedEvents(state.selectedRows)}
-                      pagination
-                      fixedHeader
-                      fixedHeaderScrollHeight="300px"
-                      customStyles={customStyles}
-                      noDataComponent={<div>There are no records to display</div>}
-                      defaultSortFieldId="startDate"
-                      defaultSortAsc={false}
-                    />
-                  </div>
-                </Disclosure.Panel>
-              </>
-            )}
-          </Disclosure>
-  
-          <Disclosure>
-            {({ open }) => (
-              <>
-                <Disclosure.Button className="mt-4 flex justify-between w-full px-4 py-2 text-left text-lg font-medium rounded-lg bg-[#333333] text-white focus:outline-none focus-visible:ring focus-visible:ring-opacity-75">
-                  <span>Individual Users</span>
-                  {open ? (
-                    <ChevronUpIcon className="w-5 h-5 text-white" />
-                  ) : (
-                    <ChevronDownIcon className="w-5 h-5 text-white" />
-                  )}
-                </Disclosure.Button>
-                <Disclosure.Panel className="px-4 pb-4 pt-4 text-sm text-gray-400">
-                  <input
-                    type="text"
-                    placeholder="Search Users..."
-                    value={usersSearch}
-                    onChange={(e) => setUsersSearch(e.target.value)}
-                    className="mb-4 w-full rounded-lg border bg-charleston p-2 text-base text-white focus:border-primary"
-                  />
-                  <div className="overflow-x-auto">
-                    <DataTable
-                      keyField="email"
-                      columns={userColumns}
-                      data={filteredUsers}
-                      selectableRows
-                      onSelectedRowsChange={(state) => setSelectedUsers(state.selectedRows)}
-                      pagination
-                      fixedHeader
-                      fixedHeaderScrollHeight="300px"
-                      customStyles={customStyles}
-                      noDataComponent={<div>There are no records to display</div>}
-                      defaultSortFieldId="email"
-                      defaultSortAsc={false}
-                    />
-                  </div>
-                </Disclosure.Panel>
-              </>
-            )}
-          </Disclosure>
-  
-          <button
-            onClick={handleSendNewsletter}
-            className="mt-8 w-full rounded-lg bg-primary py-3 text-lg text-white hover:bg-primary-dark focus:outline-none focus:ring focus:ring-primary-light disabled:opacity-50"
-            disabled={sending}
-          >
-            {sending ? "Sending..." : "Send Newsletter"}
-          </button>
-  
-          {validationErrors && (
-            <div className="mt-4 rounded-lg bg-red-100 p-4 text-red-500">
-              {validationErrors}
-            </div>
-          )}
-          {successMessage && (
-            <div className="mt-4 rounded-lg bg-green-100 p-4 text-green-500">
-              {successMessage}
-            </div>
-          )}
-          {errorMessage && (
-            <div className="mt-4 rounded-lg bg-red-100 p-4 text-red-500">
-              {errorMessage}
-            </div>
-          )}
         </>
       )}
     </div>
   );
-  
 };
 
 export default NewsletterCreation;

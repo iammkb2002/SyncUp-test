@@ -1,5 +1,3 @@
-// File: D:\Repos\SyncUp-test\app\(organization)\[slug]\dashboard\newsletter\page.tsx
-
 import {
   fetchEventsByOrganization,
   fetchMembersByOrganization,
@@ -36,22 +34,23 @@ export default async function NewsletterPage({ params }: { params: { slug: strin
   );
   const allEmails = await emailsResponse.json();
 
-  const sentEmails = allEmails.emails.filter((email: Email) => email.from.includes(organization.name));
-  const incomingEmails = allEmails.emails.filter((email: Email) =>
-    email.to.some(
+  const sentEmails = allEmails?.emails?.filter((email: Email) => email.from.includes(organization.name)) || [];
+  const incomingEmails = allEmails?.emails?.filter((email: Email) =>
+    email.to?.some(
       (addr) =>
         addr.includes(`${organization.slug}@`) ||
         addr.endsWith(`${organization.slug}@yourdomain.com`)
     )
-  );
+  ) || [];
 
   return (
     <div className="bg-raisin mb-40 w-full max-w-full space-y-6 rounded-lg pt-3 font-sans text-white">
       <NewsletterTabs
         organizationName={organization.name}
         organizationId={organization.organizationid}
-        events={fetchedEvents}
-        users={fetchedUsers}
+        organizationSlug={organization.slug}
+        events={fetchedEvents || []}
+        users={fetchedUsers || []}
         sentEmails={sentEmails}
         incomingEmails={incomingEmails}
       />

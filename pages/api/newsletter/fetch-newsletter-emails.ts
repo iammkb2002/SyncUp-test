@@ -127,6 +127,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             mailbox,
             status: "unread",
             date_created: new Date().toISOString(),
+            organizationId: function (arg0: string, organizationId: any): unknown {
+              throw new Error('Function not implemented.');
+            }
           };
 
           allEmails.push(email);
