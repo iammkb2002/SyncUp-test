@@ -251,27 +251,28 @@ export default function NewsletterPage() {
     setIsPreviewOpen(true);
   };
 
+  // Updated column definitions with fixed widths
   const eventColumns: TableColumn<Event>[] = [
     {
       name: "Title",
       selector: (row: Event) => row.title,
       sortable: true,
       id: "title",
-      minWidth: "200px",
+      width: "200px",
     },
     {
       name: "Location",
       selector: (row: Event) => row.location,
       sortable: true,
       id: "location",
-      minWidth: "150px",
+      width: "150px",
     },
     {
       name: "Date",
       selector: (row: Event) => new Date(row.starteventdatetime).toLocaleString(),
       sortable: true,
       id: "startDate",
-      minWidth: "180px",
+      width: "180px",
     },
   ];
 
@@ -281,21 +282,21 @@ export default function NewsletterPage() {
       selector: (row: CombinedUserData) => row.email || "",
       sortable: true,
       id: "email",
-      minWidth: "250px",
+      width: "250px",
     },
     {
       name: "First Name",
       selector: (row: CombinedUserData) => row.first_name || "",
       sortable: true,
       id: "firstName",
-      minWidth: "150px",
+      width: "150px",
     },
     {
       name: "Last Name",
       selector: (row: CombinedUserData) => row.last_name || "",
       sortable: true,
       id: "lastName",
-      minWidth: "150px",
+      width: "150px",
     },
   ];
 
@@ -305,21 +306,21 @@ export default function NewsletterPage() {
       selector: (row: Email) => row.subject,
       sortable: true,
       id: "subject",
-      minWidth: "250px",
+      width: "250px",
     },
     {
       name: "To",
       selector: (row: Email) => row.to.join(", "),
       sortable: true,
       id: "to",
-      minWidth: "200px",
+      width: "200px",
     },
     {
       name: "Date",
       selector: (row: Email) => new Date(row.date).toLocaleString(),
       sortable: true,
       id: "date",
-      minWidth: "180px",
+      width: "180px",
     },
     {
       name: "Actions",
@@ -332,7 +333,7 @@ export default function NewsletterPage() {
       allowOverflow: true,
       button: true,
       id: "actions",
-      minWidth: "120px",
+      width: "120px",
     },
   ];
 
@@ -342,21 +343,21 @@ export default function NewsletterPage() {
       selector: (row: Email) => row.subject,
       sortable: true,
       id: "subject",
-      minWidth: "250px",
+      width: "250px",
     },
     {
       name: "From",
       selector: (row: Email) => row.from,
       sortable: true,
       id: "from",
-      minWidth: "200px",
+      width: "200px",
     },
     {
       name: "Date",
       selector: (row: Email) => new Date(row.date).toLocaleString(),
       sortable: true,
       id: "date",
-      minWidth: "180px",
+      width: "180px",
     },
     {
       name: "Actions",
@@ -369,17 +370,16 @@ export default function NewsletterPage() {
       allowOverflow: true,
       button: true,
       id: "actions",
-      minWidth: "120px",
+      width: "120px",
     },
   ];
 
+  // Updated customStyles
   const customStyles = {
-    header: {
+    table: {
       style: {
-        backgroundColor: "#1f1f1f",
-        color: "#ffffff",
-        tableLayout: "fixed" as "fixed", // Fixed table layout
-        width: "100%", // Full width
+        tableLayout: "fixed" as "fixed",
+        width: "100%",
       },
     },
     headRow: {
@@ -391,16 +391,14 @@ export default function NewsletterPage() {
     headCells: {
       style: {
         color: "#ffffff",
-        minWidth: "150px", // Ensures header cells don't collapse
-        whiteSpace: "nowrap", // Prevents text from wrapping
+        whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
       },
     },
     cells: {
       style: {
-        minWidth: "150px", // Ensures cells maintain minimum width
-        whiteSpace: "nowrap", // Prevents text from wrapping
+        whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
       },
@@ -416,15 +414,13 @@ export default function NewsletterPage() {
       style: {
         backgroundColor: "#1f1f1f",
         color: "#ffffff",
-        justifyContent: "center", // Centers pagination controls
+        justifyContent: "center",
       },
     },
     noData: {
       style: {
         backgroundColor: "#1f1f1f",
         color: "#ffffff",
-        tableLayout: "fixed" as "fixed", // Consistent layout for no data
-        width: "100%", // Full width
       },
     },
   };
