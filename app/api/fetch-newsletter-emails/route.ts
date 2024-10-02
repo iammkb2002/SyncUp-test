@@ -31,7 +31,8 @@ async function cleanupOldAttachments(
       try {
         await fs.unlink(path.join(attachmentsDir, file));
       } catch (error: any) {
-        console.error(`Failed to delete old attachment ${file}: ${error.message}`);
+        console.log(`Attempting to delete old attachment: ${file}`);
+        console.error(`Failed to delete old attachment ${file}. Error: ${error.message}`);
       }
     }
   }
@@ -44,17 +45,23 @@ export async function GET(req: Request) {
     const organizationSlug = searchParams.get("organizationSlug"); // For incoming emails
 
     if (!organizationName || !organizationSlug) {
+      console.warn(
+        "Organization name or slug is missing in the request. OrganizationName:",
+        organizationName,
+        "OrganizationSlug:",
+        organizationSlug
+      );
       return NextResponse.json(
         { message: "Organization name and slug are required" },
         { status: 400 }
       );
     }
 
-    console.log("Connecting to IMAP server...");
+    console.log("Attempting to connect to IMAP server with config:", imapConfig);
     const connection = await imaps.connect(imapConfig);
-    console.log("IMAP server connected successfully.");
 
     const mailboxes = ["INBOX", "[Gmail]/Sent Mail"];
+    console.log("IMAP server connected successfully. Mailboxes:", mailboxes);
 
     const allEmails: Email[] = [];
 
@@ -84,10 +91,15 @@ export async function GET(req: Request) {
         if (rawEmail) {
           // Parse the raw email content
           const parsedEmail: ParsedMail = await simpleParser(rawEmail);
-          console.log("Parsed email:", parsedEmail);
+          console.log(
+            `Parsed email from ${mailbox}. Subject: ${parsedEmail.subject}, From: ${formatAddress(parsedEmail.from)}, To: ${parsedEmail.to}`
+          );
 
           // Initialize isRelevant to false
           let isRelevant = false;
+          console.log(
+            `Checking if email is relevant for organization. OrganizationName: ${organizationName}, OrganizationSlug: ${organizationSlug}`
+          );
 
           if (mailbox === "[Gmail]/Sent Mail") {
             // For sent emails, check if 'from' name includes the organization name
@@ -127,7 +139,9 @@ export async function GET(req: Request) {
 
             if (!downloadedAttachments.has(sanitizedFilename)) {
               try {
-                console.log(`Saving attachment to ${filePath}`);
+                console.log(
+                  `Saving attachment to ${filePath}. Original filename: ${originalFilename}, Unique filename: ${sanitizedFilename}`
+                );
                 await fs.writeFile(filePath, attachment.content);
 
                 downloadedAttachments.add(sanitizedFilename);
@@ -139,7 +153,7 @@ export async function GET(req: Request) {
                 });
               } catch (writeError: any) {
                 console.error(
-                  `Failed to save attachment ${sanitizedFilename}: ${writeError.message}`
+                  `Failed to save attachment ${sanitizedFilename}. Original filename: ${originalFilename}. Error: ${writeError.message}`
                 );
 
                 // Optionally, continue without failing the entire email processing
@@ -167,20 +181,23 @@ export async function GET(req: Request) {
             status: "unread",
             date_created: new Date().toISOString(),
           };
-
+          console.log(
+            `Email added to allEmails array. Email ID: ${email.id}, Subject: ${email.subject}, From: ${email.from}`
+          );
           allEmails.push(email);
         }
       }
     }
-
+    console.log("Closing IMAP connection...");
     connection.end();
+    console.log("IMAP connection closed successfully.");
 
     // Clean up old attachments
     await cleanupOldAttachments(attachmentsDir, downloadedAttachments);
 
     return NextResponse.json({ emails: allEmails });
   } catch (error: any) {
-    console.error("Error while fetching emails:", error.message);
+    console.error("Error while fetching emails. Full error object:", error);
 
     return NextResponse.json(
       { message: "Error fetching emails", error: error.message },
