@@ -257,24 +257,21 @@ export default function NewsletterPage() {
       selector: (row: Event) => row.title,
       sortable: true,
       id: "title",
-      wrap: true, // Ensure proper wrapping
-      grow: 1, // Ensure the column takes available space
+      minWidth: "200px",
     },
     {
       name: "Location",
       selector: (row: Event) => row.location,
       sortable: true,
       id: "location",
-      wrap: true,
-      grow: 1,
+      minWidth: "150px",
     },
     {
       name: "Date",
       selector: (row: Event) => new Date(row.starteventdatetime).toLocaleString(),
       sortable: true,
       id: "startDate",
-      wrap: true,
-      grow: 1,
+      minWidth: "180px",
     },
   ];
 
@@ -284,24 +281,21 @@ export default function NewsletterPage() {
       selector: (row: CombinedUserData) => row.email || "",
       sortable: true,
       id: "email",
-      wrap: true,
-      grow: 1,
+      minWidth: "250px",
     },
     {
       name: "First Name",
       selector: (row: CombinedUserData) => row.first_name || "",
       sortable: true,
       id: "firstName",
-      wrap: true,
-      grow: 1,
+      minWidth: "150px",
     },
     {
       name: "Last Name",
       selector: (row: CombinedUserData) => row.last_name || "",
       sortable: true,
       id: "lastName",
-      wrap: true,
-      grow: 1,
+      minWidth: "150px",
     },
   ];
 
@@ -311,24 +305,21 @@ export default function NewsletterPage() {
       selector: (row: Email) => row.subject,
       sortable: true,
       id: "subject",
-      wrap: true,
-      grow: 1,
+      minWidth: "250px",
     },
     {
       name: "To",
       selector: (row: Email) => row.to.join(", "),
       sortable: true,
       id: "to",
-      wrap: true,
-      grow: 1,
+      minWidth: "200px",
     },
     {
       name: "Date",
       selector: (row: Email) => new Date(row.date).toLocaleString(),
       sortable: true,
       id: "date",
-      wrap: true,
-      grow: 1,
+      minWidth: "180px",
     },
     {
       name: "Actions",
@@ -341,6 +332,7 @@ export default function NewsletterPage() {
       allowOverflow: true,
       button: true,
       id: "actions",
+      minWidth: "120px",
     },
   ];
 
@@ -350,24 +342,21 @@ export default function NewsletterPage() {
       selector: (row: Email) => row.subject,
       sortable: true,
       id: "subject",
-      wrap: true, // Ensure proper wrapping
-      grow: 1, // Ensure the column takes available space
+      minWidth: "250px",
     },
     {
       name: "From",
       selector: (row: Email) => row.from,
       sortable: true,
       id: "from",
-      wrap: true,
-      grow: 1,
+      minWidth: "200px",
     },
     {
       name: "Date",
       selector: (row: Email) => new Date(row.date).toLocaleString(),
       sortable: true,
       id: "date",
-      wrap: true,
-      grow: 1,
+      minWidth: "180px",
     },
     {
       name: "Actions",
@@ -380,60 +369,23 @@ export default function NewsletterPage() {
       allowOverflow: true,
       button: true,
       id: "actions",
+      minWidth: "120px",
     },
   ];
 
   const customStyles = {
-    header: {
-      style: {
-        backgroundColor: "#1f1f1f",
-        color: "#ffffff",
-        display: "table", // Ensure headers behave like table headers
-      },
-    },
-    headRow: {
-      style: {
-        backgroundColor: "#333333",
-        color: "#ffffff",
-        display: "table-row",
-      },
-    },
-    headCells: {
-      style: {
-        color: "#ffffff",
-        display: "table-cell",
-        whiteSpace: "nowrap", // Prevent header wrapping in production
-      },
-    },
+    header: { style: { backgroundColor: "#1f1f1f", color: "#ffffff" } },
+    headRow: { style: { backgroundColor: "#333333", color: "#ffffff" } },
+    headCells: { style: { color: "#ffffff" } },
     rows: {
       style: {
         backgroundColor: "#2a2a2a",
         color: "#ffffff",
-        display: "table-row", // Ensure rows behave like table rows
         "&:hover": { backgroundColor: "#3e3e3e" },
       },
     },
-    cells: {
-      style: {
-        display: "table-cell", // Ensure cells behave like table cells
-        whiteSpace: "normal", // Ensure proper wrapping
-      },
-    },
-    pagination: {
-      style: {
-        backgroundColor: "#1f1f1f",
-        color: "#ffffff",
-        display: "flex",
-        justifyContent: "center",
-      },
-    },
-    noData: {
-      style: {
-        backgroundColor: "#1f1f1f",
-        color: "#ffffff",
-        textAlign: "center" as "center",
-      },
-    },
+    pagination: { style: { backgroundColor: "#1f1f1f", color: "#ffffff" } },
+    noData: { style: { backgroundColor: "#1f1f1f", color: "#ffffff" } },
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -587,26 +539,28 @@ export default function NewsletterPage() {
                       onChange={(e) => setEventsSearch(e.target.value)}
                       className="mb-4 w-full rounded border bg-charleston p-2 text-base focus:border-primary"
                     />
-                    <DataTable
-                      keyField="eventid"
-                      columns={eventColumns}
-                      data={filteredEvents}
-                      selectableRows
-                      onSelectedRowsChange={(state) =>
-                        setSelectedEvents(state.selectedRows)
-                      }
-                      pagination
-                      customStyles={customStyles}
-                      noDataComponent={<div>There are no records to display</div>}
-                      progressPending={eventsLoading}
-                      progressComponent={
-                        <div className="w-full rounded bg-charleston p-2 text-center text-white">
-                          Loading...
-                        </div>
-                      }
-                      defaultSortFieldId="startDate"
-                      defaultSortAsc={false}
-                    />
+                    <div className="overflow-x-auto">
+                      <DataTable
+                        keyField="eventid"
+                        columns={eventColumns}
+                        data={filteredEvents}
+                        selectableRows
+                        onSelectedRowsChange={(state) =>
+                          setSelectedEvents(state.selectedRows)
+                        }
+                        pagination
+                        customStyles={customStyles}
+                        noDataComponent={<div>There are no records to display</div>}
+                        progressPending={eventsLoading}
+                        progressComponent={
+                          <div className="w-full rounded bg-charleston p-2 text-center text-white">
+                            Loading...
+                          </div>
+                        }
+                        defaultSortFieldId="startDate"
+                        defaultSortAsc={false}
+                      />
+                    </div>
                   </Disclosure.Panel>
                 </>
               )}
@@ -631,26 +585,28 @@ export default function NewsletterPage() {
                       onChange={(e) => setUsersSearch(e.target.value)}
                       className="mb-4 w-full rounded border bg-charleston p-2 text-base focus:border-primary"
                     />
-                    <DataTable
-                      keyField="email"
-                      columns={userColumns}
-                      data={filteredUsers}
-                      selectableRows
-                      onSelectedRowsChange={(state) =>
-                        setSelectedUsers(state.selectedRows)
-                      }
-                      pagination
-                      customStyles={customStyles}
-                      noDataComponent={<div>There are no records to display</div>}
-                      progressPending={usersLoading}
-                      progressComponent={
-                        <div className="w-full rounded bg-charleston p-2 text-center text-white">
-                          Loading...
-                        </div>
-                      }
-                      defaultSortFieldId="email"
-                      defaultSortAsc={false}
-                    />
+                    <div className="overflow-x-auto">
+                      <DataTable
+                        keyField="email"
+                        columns={userColumns}
+                        data={filteredUsers}
+                        selectableRows
+                        onSelectedRowsChange={(state) =>
+                          setSelectedUsers(state.selectedRows)
+                        }
+                        pagination
+                        customStyles={customStyles}
+                        noDataComponent={<div>There are no records to display</div>}
+                        progressPending={usersLoading}
+                        progressComponent={
+                          <div className="w-full rounded bg-charleston p-2 text-center text-white">
+                            Loading...
+                          </div>
+                        }
+                        defaultSortFieldId="email"
+                        defaultSortAsc={false}
+                      />
+                    </div>
                   </Disclosure.Panel>
                 </>
               )}
@@ -717,22 +673,24 @@ export default function NewsletterPage() {
                     onChange={(e) => setOutgoingSearch(e.target.value)}
                     className="mb-4 mt-2 w-full rounded border bg-charleston p-2 text-base focus:border-primary"
                   />
-                  <DataTable
-                    keyField="id"
-                    columns={outgoingEmailColumns}
-                    data={filteredSentEmails}
-                    pagination
-                    customStyles={customStyles}
-                    noDataComponent={<div>There are no records to display</div>}
-                    progressPending={emailsLoading}
-                    progressComponent={
-                      <div className="w-full rounded bg-charleston p-2 text-center text-white">
-                        Emails take longer to load. Please wait.
-                      </div>
-                    }
-                    defaultSortFieldId="date"
-                    defaultSortAsc={false}
-                  />
+                  <div className="overflow-x-auto">
+                    <DataTable
+                      keyField="id"
+                      columns={outgoingEmailColumns}
+                      data={filteredSentEmails}
+                      pagination
+                      customStyles={customStyles}
+                      noDataComponent={<div>There are no records to display</div>}
+                      progressPending={emailsLoading}
+                      progressComponent={
+                        <div className="w-full rounded bg-charleston p-2 text-center text-white">
+                          Emails take longer to load. Please wait.
+                        </div>
+                      }
+                      defaultSortFieldId="date"
+                      defaultSortAsc={false}
+                    />
+                  </div>
                 </Tab.Panel>
                 <Tab.Panel>
                   <input
@@ -742,22 +700,24 @@ export default function NewsletterPage() {
                     onChange={(e) => setIncomingSearch(e.target.value)}
                     className="mb-4 mt-2 w-full rounded border bg-charleston p-2 text-base focus:border-primary"
                   />
-                  <DataTable
-                    keyField="id"
-                    columns={incomingEmailColumns}
-                    data={filteredIncomingEmails}
-                    pagination
-                    customStyles={customStyles}
-                    noDataComponent={<div>There are no records to display</div>}
-                    progressPending={emailsLoading}
-                    progressComponent={
-                      <div className="w-full rounded bg-charleston p-2 text-center text-white">
-                        Emails take longer to load. Please wait.
-                      </div>
-                    }
-                    defaultSortFieldId="date"
-                    defaultSortAsc={false}
-                  />
+                  <div className="overflow-x-auto">
+                    <DataTable
+                      keyField="id"
+                      columns={incomingEmailColumns}
+                      data={filteredIncomingEmails}
+                      pagination
+                      customStyles={customStyles}
+                      noDataComponent={<div>There are no records to display</div>}
+                      progressPending={emailsLoading}
+                      progressComponent={
+                        <div className="w-full rounded bg-charleston p-2 text-center text-white">
+                          Emails take longer to load. Please wait.
+                        </div>
+                      }
+                      defaultSortFieldId="date"
+                      defaultSortAsc={false}
+                    />
+                  </div>
                 </Tab.Panel>
               </Tab.Panels>
             </Tab.Group>
