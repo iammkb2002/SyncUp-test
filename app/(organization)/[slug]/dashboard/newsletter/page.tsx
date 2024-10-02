@@ -108,6 +108,13 @@ export default function NewsletterPage() {
 
     async function fetchEmails(organizationName: string, organizationSlug: string) {
       if (!emailsFetched.current) {
+        console.log(
+          "Fetching emails for organization:",
+          organizationName,
+          "with slug:",
+          organizationSlug
+        );
+
         const emailsResponse = await axios.get("/api/fetch-newsletter-emails", {
           params: {
             organizationName,
@@ -115,6 +122,8 @@ export default function NewsletterPage() {
           },
         });
         const allEmails: { emails: Email[] } = emailsResponse.data;
+        console.log("Fetched emails:", allEmails);
+
         const sentEmailsData = allEmails.emails.filter((email: Email) =>
           email.from.includes(organizationName)
         );
@@ -125,6 +134,8 @@ export default function NewsletterPage() {
               addr.endsWith(`${organizationSlug}@yourdomain.com`)
           )
         );
+        console.log("Setting sent emails:", sentEmailsData);
+        console.log("Setting incoming emails:", incomingEmailsData);
 
         setSentEmails(sentEmailsData);
         setIncomingEmails(incomingEmailsData);

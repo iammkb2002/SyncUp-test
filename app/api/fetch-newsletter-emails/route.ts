@@ -50,7 +50,10 @@ export async function GET(req: Request) {
       );
     }
 
+    console.log("Connecting to IMAP server...");
     const connection = await imaps.connect(imapConfig);
+    console.log("IMAP server connected successfully.");
+
     const mailboxes = ["INBOX", "[Gmail]/Sent Mail"];
 
     const allEmails: Email[] = [];
@@ -62,6 +65,7 @@ export async function GET(req: Request) {
     await fs.mkdir(attachmentsDir, { recursive: true });
 
     for (const mailbox of mailboxes) {
+      console.log(`Fetching emails from mailbox: ${mailbox}`);
       await connection.openBox(mailbox);
 
       const searchCriteria = ["ALL"];
@@ -80,6 +84,7 @@ export async function GET(req: Request) {
         if (rawEmail) {
           // Parse the raw email content
           const parsedEmail: ParsedMail = await simpleParser(rawEmail);
+          console.log("Parsed email:", parsedEmail);
 
           // Initialize isRelevant to false
           let isRelevant = false;
@@ -122,6 +127,7 @@ export async function GET(req: Request) {
 
             if (!downloadedAttachments.has(sanitizedFilename)) {
               try {
+                console.log(`Saving attachment to ${filePath}`);
                 await fs.writeFile(filePath, attachment.content);
 
                 downloadedAttachments.add(sanitizedFilename);
@@ -174,7 +180,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ emails: allEmails });
   } catch (error: any) {
-    console.error("Error fetching emails: %o", error);
+    console.error("Error while fetching emails:", error.message);
+
     return NextResponse.json(
       { message: "Error fetching emails", error: error.message },
       { status: 500 }

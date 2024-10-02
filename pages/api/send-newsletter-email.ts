@@ -1,8 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import formidable, { IncomingForm, Fields, Files } from 'formidable';
-import fs from 'fs/promises';
-import nodemailer from 'nodemailer';
-import { OutgoingAttachment, EmailResult, OutgoingEmailData } from '@/types/email';
+import type { NextApiRequest, NextApiResponse } from "next";
+import formidable, { IncomingForm, Fields, Files } from "formidable";
+import fs from "fs/promises";
+import nodemailer from "nodemailer";
+import { OutgoingAttachment, EmailResult, OutgoingEmailData } from "@/types/email";
 
 export const config = {
   api: {
@@ -21,7 +21,7 @@ export const config = {
  */
 const getString = (
   field: string | string[] | undefined,
-  defaultValue: string = ''
+  defaultValue: string = ""
 ): string => {
   if (Array.isArray(field)) return field[0];
   return field || defaultValue;
@@ -59,17 +59,19 @@ async function sendNewsletterEmail({
   attachments = [],
 }: OutgoingEmailData): Promise<EmailResult> {
   try {
-    console.log('Preparing to send email to recipients:', recipients);
+    console.log("Preparing to send email to recipients:", recipients);
+    console.log("Creating Nodemailer transporter");
+
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       auth: {
         user: process.env.NEXT_PUBLIC_GMAIL_USER!, // Gmail address from environment variable
         pass: process.env.NEXT_PUBLIC_GMAIL_APP_PASSWORD!, // Gmail App Password from environment variable
       },
     });
-    console.log('Nodemailer transporter created.');
+    console.log("Nodemailer transporter created.");
     await transporter.verify();
-    console.log('Nodemailer transporter verified successfully.');
+    console.log("Nodemailer transporter verified successfully.");
 
     const mailAttachments =
       attachments.length > 0
@@ -81,26 +83,26 @@ async function sendNewsletterEmail({
         : undefined;
 
     if (mailAttachments) {
-      console.log('Prepared mail attachments:', mailAttachments);
+      console.log("Prepared mail attachments:", mailAttachments);
     } else {
-      console.log('No attachments to include in the email.');
+      console.log("No attachments to include in the email.");
     }
 
     const mailOptions: nodemailer.SendMailOptions = {
       from: `"${fromName}" <${process.env.NEXT_PUBLIC_GMAIL_USER!}>`, // Custom name for the "From" field
-      replyTo: `${process.env.NEXT_PUBLIC_GMAIL_USER!.split('@')[0]}+${replyToExtension}@gmail.com`, // Custom Reply-To using +extension
-      to: recipients.join(', '), // The recipients' emails as a comma-separated string
+      replyTo: `${process.env.NEXT_PUBLIC_GMAIL_USER!.split("@")[0]}+${replyToExtension}@gmail.com`, // Custom Reply-To using +extension
+      to: recipients.join(", "), // The recipients' emails as a comma-separated string
       subject: subject, // The email subject
       html: message, // The email message in HTML format
       attachments: mailAttachments, // Attachments if any
     };
 
-    console.log('Mail options prepared:', mailOptions);
+    console.log("Mail options prepared:", mailOptions);
     await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully.');
+    console.log("Email sent successfully.");
     return { success: true };
   } catch (error: any) {
-    console.error('Error sending email:', error);
+    console.error("Error sending email:", error);
     return { success: false, error: error.message };
   }
 }
@@ -113,23 +115,18 @@ async function sendNewsletterEmail({
  * @param req - NextApiRequest object
  * @param res - NextApiResponse object
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  console.log('Received request:', {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  console.log("Received request:", {
     method: req.method,
     headers: req.headers,
     url: req.url,
   });
 
   try {
-    if (req.method !== 'POST') {
+    if (req.method !== "POST") {
       console.warn(`Method ${req.method} not allowed.`);
-      res.setHeader('Allow', ['POST']);
-      return res
-        .status(405)
-        .json({ error: `Method '${req.method}' Not Allowed` });
+      res.setHeader("Allow", ["POST"]);
+      return res.status(405).json({ error: `Method '${req.method}' Not Allowed` });
     }
 
     const form = new IncomingForm({
@@ -137,7 +134,7 @@ export default async function handler(
       maxFileSize: 25 * 1024 * 1024, // 25MB per file
       allowEmptyFiles: false,
     });
-    console.log('Initialized formidable with options:', form);
+    console.log("Initialized formidable with options:", form);
 
     const { fields, files } = await new Promise<{
       fields: Fields;
@@ -145,17 +142,17 @@ export default async function handler(
     }>((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
         if (err) {
-          console.error('Formidable parse error:', err);
+          console.error("Formidable parse error:", err);
           reject(err);
         } else {
-          console.log('Formidable parsed fields:', fields);
-          console.log('Formidable parsed files:', files);
+          console.log("Formidable parsed fields:", fields);
+          console.log("Formidable parsed files:", files);
           resolve({ fields, files });
         }
       });
     });
 
-    const fromName = getString(fields.fromName, 'Default Name');
+    const fromName = getString(fields.fromName, "Default Name");
     const replyToExtension = getString(fields.replyToExtension);
     const recipientsString = getString(fields.recipients);
     let recipients: string[] = [];
@@ -163,50 +160,45 @@ export default async function handler(
       try {
         recipients = JSON.parse(recipientsString);
         if (!Array.isArray(recipients)) {
-          throw new Error('Recipients should be an array.');
+          throw new Error("Recipients should be an array.");
         }
-        console.log('Parsed recipients:', recipients);
+        console.log("Parsed recipients:", recipients);
       } catch (error: any) {
-        console.error('Invalid recipients format:', error.message);
+        console.error("Invalid recipients format:", error.message);
         return res.status(400).json({
-          message: 'Invalid recipients format.',
+          message: "Invalid recipients format.",
           error: error.message,
         });
       }
     }
 
     const validRecipients = validateEmails(recipients);
-    console.log('Valid recipients after validation:', validRecipients);
+    console.log("Valid recipients after validation:", validRecipients);
     if (validRecipients.length === 0) {
-      console.warn('No valid recipients provided.');
-      return res
-        .status(400)
-        .json({ message: 'No valid recipients provided.' });
+      console.warn("No valid recipients provided.");
+      return res.status(400).json({ message: "No valid recipients provided." });
     }
 
-    const subject = getString(fields.subject, 'Default Subject');
-    const message = getString(fields.message, '');
-    console.log('Email subject:', subject);
-    console.log('Email message:', message);
+    const subject = getString(fields.subject, "Default Subject");
+    const message = getString(fields.message, "");
+    console.log("Email subject:", subject);
+    console.log("Email message:", message);
 
     let attachments: OutgoingAttachment[] = [];
     if (files.attachments) {
       const attachmentsArray = Array.isArray(files.attachments)
         ? files.attachments
         : [files.attachments];
-      console.log('Processing attachments:', attachmentsArray);
+      console.log("Processing attachments:", attachmentsArray);
 
-      const totalSize = attachmentsArray.reduce(
-        (acc, file) => acc + (file.size || 0),
-        0
-      );
+      const totalSize = attachmentsArray.reduce((acc, file) => acc + (file.size || 0), 0);
       const maxTotalSize = 25 * 1024 * 1024; // 25MB
       if (totalSize > maxTotalSize) {
         console.warn(
           `Total attachment size ${totalSize} exceeds the limit of ${maxTotalSize} bytes.`
         );
         return res.status(400).json({
-          message: 'Total attachment size exceeds the 25MB limit.',
+          message: "Total attachment size exceeds the 25MB limit.",
         });
       }
 
@@ -227,18 +219,18 @@ export default async function handler(
           }
 
           return {
-            filename: file.originalFilename || 'attachment',
+            filename: file.originalFilename || "attachment",
             content,
-            contentType: file.mimetype || 'application/octet-stream',
+            contentType: file.mimetype || "application/octet-stream",
           } as OutgoingAttachment;
         })
       );
-      console.log('Processed attachments:', attachments);
+      console.log("Processed attachments:", attachments);
     } else {
-      console.log('No attachments provided.');
+      console.log("No attachments provided.");
     }
 
-    console.log('Sending newsletter email...');
+    console.log("Sending newsletter email...");
     const result: EmailResult = await sendNewsletterEmail({
       fromName,
       replyToExtension,
@@ -247,22 +239,22 @@ export default async function handler(
       message,
       attachments,
     });
-    console.log('Email sending result:', result);
+    console.log("Email sending result:", result);
 
     if (result.success) {
-      console.log('Email sent successfully.');
-      return res.status(200).json({ message: 'Email sent successfully' });
+      console.log("Email sent successfully.");
+      return res.status(200).json({ message: "Email sent successfully" });
     } else {
-      console.error('Error sending email:', result.error);
+      console.error("Error sending email:", result.error);
       return res.status(500).json({
-        message: 'Error sending email',
+        message: "Error sending email",
         error: result.error,
       });
     }
   } catch (error: any) {
-    console.error('Unexpected error in send-newsletter-email route:', error);
+    console.error("Unexpected error in send-newsletter-email route:", error);
     return res.status(500).json({
-      message: 'An unexpected error occurred',
+      message: "An unexpected error occurred",
       error: error.message,
     });
   }
