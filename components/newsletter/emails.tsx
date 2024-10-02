@@ -206,7 +206,6 @@ const Emails: React.FC<EmailsProps> = ({
 
   return (
     <div>
-      <h2 className="border-b-2 border-primary pb-4 text-2xl">Emails</h2>
 
       {/* **Conditional Rendering Within JSX** */}
       {!hasPermission ? (

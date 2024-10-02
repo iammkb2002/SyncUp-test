@@ -46,7 +46,7 @@ export default async function NewsletterPage({ params }: { params: { slug: strin
   );
 
   return (
-    <div className="bg-raisin mb-40 w-full max-w-full space-y-6 rounded-lg font-sans text-white">
+    <div className="bg-raisin mb-40 w-full max-w-full space-y-6 rounded-lg pt-3 font-sans text-white">
       <NewsletterTabs
         organizationName={organization.name}
         organizationId={organization.organizationid}

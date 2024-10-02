@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import React, { Fragment } from "react";
+import { Tab } from "@headlessui/react";
 import NewsletterCreation from "./newsletter_creation";
 import Emails from "./emails";
 
@@ -13,10 +14,9 @@ interface NewsletterTabsProps {
   incomingEmails: any[]; // Replace with Email type
 }
 
-const tabs = [
-  { name: "Newsletter Creation", component: "creation" },
-  { name: "Emails", component: "emails" },
-];
+function classNames(...classes: string[]) {
+  return classes.filter(Boolean).join(" ");
+}
 
 const NewsletterTabs: React.FC<NewsletterTabsProps> = ({
   organizationName,
@@ -26,46 +26,54 @@ const NewsletterTabs: React.FC<NewsletterTabsProps> = ({
   sentEmails,
   incomingEmails,
 }) => {
-  const [activeTab, setActiveTab] = useState<string>("creation");
-
   return (
     <div className="bg-raisin rounded-lg font-sans text-white">
-      {/* Tab Navigation */}
-      <div className="flex border-b border-gray-700 mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.component}
-            className={`py-2 px-4 -mb-px text-sm font-medium focus:outline-none transition-colors ${
-              activeTab === tab.component
-                ? "border-b-2 border-indigo-500 text-indigo-500"
-                : "text-gray-400 hover:text-white"
-            }`}
-            onClick={() => setActiveTab(tab.component)}
+      <Tab.Group>
+        <Tab.List className="flex space-x-1 rounded-xl bg-[#333333] p-1 mb-6">
+          <Tab
+            className={({ selected }) =>
+              classNames(
+                "w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-white",
+                selected
+                  ? "bg-primary shadow"
+                  : "hover:bg-white/[0.12] hover:text-white"
+              )
+            }
           >
-            {tab.name}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
-      <div>
-        {activeTab === "creation" && (
-          <NewsletterCreation
-            organizationName={organizationName}
-            organizationId={organizationId}
-            events={events}
-            users={users}
-          />
-        )}
-        {activeTab === "emails" && (
-          <Emails
-            sentEmails={sentEmails}
-            incomingEmails={incomingEmails}
-            organizationName={organizationName}
-            organizationId={organizationId}
-          />
-        )}
-      </div>
+            Newsletter Creation
+          </Tab>
+          <Tab
+            className={({ selected }) =>
+              classNames(
+                "w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-white",
+                selected
+                  ? "bg-primary shadow"
+                  : "hover:bg-white/[0.12] hover:text-white"
+              )
+            }
+          >
+            Emails
+          </Tab>
+        </Tab.List>
+        <Tab.Panels>
+          <Tab.Panel>
+            <NewsletterCreation
+              organizationName={organizationName}
+              organizationId={organizationId}
+              events={events}
+              users={users}
+            />
+          </Tab.Panel>
+          <Tab.Panel>
+            <Emails
+              sentEmails={sentEmails}
+              incomingEmails={incomingEmails}
+              organizationName={organizationName}
+              organizationId={organizationId}
+            />
+          </Tab.Panel>
+        </Tab.Panels>
+      </Tab.Group>
     </div>
   );
 };
