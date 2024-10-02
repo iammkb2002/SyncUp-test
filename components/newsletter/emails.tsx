@@ -5,17 +5,16 @@
 import React, { useState, Fragment, useMemo, useEffect } from "react";
 import { Email } from "@/types/email";
 import DataTable, { TableColumn, TableStyles } from "react-data-table-component";
-import { Tab, Dialog, Transition } from "@headlessui/react";
-import { ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/20/solid";
+import { Dialog, Transition } from "@headlessui/react";
 import parse from "html-react-parser";
-import { check_permissions } from "@/lib/newsletter_actions"; // Add this import
+import { check_permissions } from "@/lib/newsletter_actions";
+import { useUser } from "@/context/user_context";
 
 interface EmailsProps {
   sentEmails: Email[];
   incomingEmails: Email[];
-  emailsLoading: boolean;
   organizationName: string;
-  organizationSlug: string;
+  organizationId: string;
 }
 
 function classNames(...classes: string[]) {
@@ -75,10 +74,12 @@ const customStyles: TableStyles = {
 const Emails: React.FC<EmailsProps> = ({
   sentEmails,
   incomingEmails,
-  emailsLoading,
   organizationName,
-  organizationSlug,
+  organizationId,
 }) => {
+  const { user } = useUser();
+
+  // **All Hooks are called here, unconditionally**
   const [hasPermission, setHasPermission] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -87,21 +88,17 @@ const Emails: React.FC<EmailsProps> = ({
 
   useEffect(() => {
     async function checkUserPermissions() {
-      const permission = await check_permissions("", organizationSlug, "view_emails");
+      const permission = await check_permissions(
+        organizationId,
+        "send_newsletters",
+        user?.id || ""
+      );
       setHasPermission(permission);
     }
     checkUserPermissions();
-  }, [organizationSlug]);
+  }, [user, organizationId]);
 
-  if (!hasPermission) {
-    return <div className="text-red-500">You do not have permission to view emails.</div>;
-  }
-
-  const openEmailPreview = (email: Email) => {
-    setSelectedEmail(email);
-    setIsPreviewOpen(true);
-  };
-
+  // **Hooks below are always called, regardless of `hasPermission`**
   const outgoingEmailColumns: TableColumn<Email>[] = [
     {
       name: "Subject",
@@ -127,7 +124,10 @@ const Emails: React.FC<EmailsProps> = ({
     {
       name: "Actions",
       cell: (row: Email) => (
-        <button className="text-primary underline" onClick={() => openEmailPreview(row)}>
+        <button
+          className="text-primary underline"
+          onClick={() => openEmailPreview(row)}
+        >
           Preview
         </button>
       ),
@@ -164,7 +164,10 @@ const Emails: React.FC<EmailsProps> = ({
     {
       name: "Actions",
       cell: (row: Email) => (
-        <button className="text-primary underline" onClick={() => openEmailPreview(row)}>
+        <button
+          className="text-primary underline"
+          onClick={() => openEmailPreview(row)}
+        >
           Preview
         </button>
       ),
@@ -179,51 +182,48 @@ const Emails: React.FC<EmailsProps> = ({
   const filteredSentEmails = useMemo(() => {
     if (!outgoingSearch) return sentEmails;
     return sentEmails.filter((email) =>
-      Object.values(email).join(" ").toLowerCase().includes(outgoingSearch.toLowerCase())
+      Object.values(email)
+        .join(" ")
+        .toLowerCase()
+        .includes(outgoingSearch.toLowerCase())
     );
   }, [sentEmails, outgoingSearch]);
 
   const filteredIncomingEmails = useMemo(() => {
     if (!incomingSearch) return incomingEmails;
     return incomingEmails.filter((email) =>
-      Object.values(email).join(" ").toLowerCase().includes(incomingSearch.toLowerCase())
+      Object.values(email)
+        .join(" ")
+        .toLowerCase()
+        .includes(incomingSearch.toLowerCase())
     );
   }, [incomingEmails, incomingSearch]);
+
+  const openEmailPreview = (email: Email) => {
+    setSelectedEmail(email);
+    setIsPreviewOpen(true);
+  };
 
   return (
     <div>
       <h2 className="border-b-2 border-primary pb-4 text-2xl">Emails</h2>
-      <Tab.Group>
-        <Tab.List className="flex space-x-1 rounded-xl bg-[#333333] p-1">
-          <Tab
-            className={({ selected }) =>
-              classNames(
-                "w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-white",
-                selected ? "bg-primary shadow" : "hover:bg-white/[0.12] hover:text-white"
-              )
-            }
-          >
-            Outgoing Emails
-          </Tab>
-          <Tab
-            className={({ selected }) =>
-              classNames(
-                "w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-white",
-                selected ? "bg-primary shadow" : "hover:bg-white/[0.12] hover:text-white"
-              )
-            }
-          >
-            Incoming Emails
-          </Tab>
-        </Tab.List>
-        <Tab.Panels>
-          <Tab.Panel>
+
+      {/* **Conditional Rendering Within JSX** */}
+      {!hasPermission ? (
+        <div className="text-red-500">
+          You do not have permission to view emails.
+        </div>
+      ) : (
+        <>
+          {/* Outgoing Emails Section */}
+          <div className="mb-8">
+            <h3 className="text-xl font-semibold mb-4">Outgoing Emails</h3>
             <input
               type="text"
               placeholder="Search Outgoing Emails..."
               value={outgoingSearch}
               onChange={(e) => setOutgoingSearch(e.target.value)}
-              className="mb-4 mt-2 w-full rounded border bg-charleston p-2 text-base focus:border-primary"
+              className="mb-4 w-full rounded border bg-charleston p-2 text-base focus:border-primary"
             />
             <div className="overflow-x-auto">
               <DataTable
@@ -235,24 +235,22 @@ const Emails: React.FC<EmailsProps> = ({
                 fixedHeaderScrollHeight="400px"
                 customStyles={customStyles}
                 noDataComponent={<div>There are no records to display</div>}
-                progressPending={emailsLoading}
-                progressComponent={
-                  <div className="w-full rounded bg-charleston p-2 text-center text-white">
-                    Emails take longer to load. Please wait.
-                  </div>
-                }
+                progressPending={false}
                 defaultSortFieldId="date"
                 defaultSortAsc={false}
               />
             </div>
-          </Tab.Panel>
-          <Tab.Panel>
+          </div>
+
+          {/* Incoming Emails Section */}
+          <div>
+            <h3 className="text-xl font-semibold mb-4">Incoming Emails</h3>
             <input
               type="text"
               placeholder="Search Incoming Emails..."
               value={incomingSearch}
               onChange={(e) => setIncomingSearch(e.target.value)}
-              className="mb-4 mt-2 w-full rounded border bg-charleston p-2 text-base focus:border-primary"
+              className="mb-4 w-full rounded border bg-charleston p-2 text-base focus:border-primary"
             />
             <div className="overflow-x-auto">
               <DataTable
@@ -264,20 +262,16 @@ const Emails: React.FC<EmailsProps> = ({
                 fixedHeaderScrollHeight="400px"
                 customStyles={customStyles}
                 noDataComponent={<div>There are no records to display</div>}
-                progressPending={emailsLoading}
-                progressComponent={
-                  <div className="w-full rounded bg-charleston p-2 text-center text-white">
-                    Emails take longer to load. Please wait.
-                  </div>
-                }
+                progressPending={false}
                 defaultSortFieldId="date"
                 defaultSortAsc={false}
               />
             </div>
-          </Tab.Panel>
-        </Tab.Panels>
-      </Tab.Group>
+          </div>
+        </>
+      )}
 
+      {/* **Email Preview Modal** */}
       {selectedEmail && (
         <Transition appear show={isPreviewOpen} as={Fragment}>
           <Dialog
@@ -335,10 +329,15 @@ const Emails: React.FC<EmailsProps> = ({
 
                     {selectedEmail.attachments.length > 0 && (
                       <div className="mt-4">
-                        <h4 className="text-md font-semibold text-white">Attachments:</h4>
+                        <h4 className="text-md font-semibold text-white">
+                          Attachments:
+                        </h4>
                         <ul className="mt-2">
                           {selectedEmail.attachments.map((attachment, index) => (
-                            <li key={index} className="text-blue-400 hover:underline">
+                            <li
+                              key={index}
+                              className="text-blue-400 hover:underline"
+                            >
                               <a
                                 href={attachment.url}
                                 target="_blank"

@@ -32,8 +32,15 @@ export async function sendEmail(emailContent: EmailContent) {
   // console.log("Sending email with content:", emailContent);
   try {
     const response = await resend.emails.send(emailContent);
-    if (response.error && response.error.message.includes('You can only send testing emails to your own email address')) {
-      throw new Error('You can only send emails to the account bound to the Resend API Free Plan.');
+    if (
+      response.error &&
+      response.error.message.includes(
+        "You can only send testing emails to your own email address"
+      )
+    ) {
+      throw new Error(
+        "You can only send emails to the account bound to the Resend API Free Plan."
+      );
     }
     // console.log("Email sent:", response);
     return response;
@@ -81,17 +88,19 @@ export async function sendNewsletter(
         const emailResponse = await sendEmail(emailContent);
         if (emailResponse && emailResponse.data) {
           // console.log("Email sent to:", user.email);
-          const { data: insertData, error: insertError } = await supabase.from("emails").insert([
-            {
-              sender_id: organizationUuid,
-              receiver_id: user.id,
-              sender: organizationName,
-              receiver: user.email,
-              subject,
-              body: content,
-              status: "Sent",
-            },
-          ]);
+          const { data: insertData, error: insertError } = await supabase
+            .from("emails")
+            .insert([
+              {
+                sender_id: organizationUuid,
+                receiver_id: user.id,
+                sender: organizationName,
+                receiver: user.email,
+                subject,
+                body: content,
+                status: "Sent",
+              },
+            ]);
 
           if (insertError) {
             console.error("Error inserting email record:", insertError.message);
@@ -162,10 +171,9 @@ export async function fetchEventsByOrganization(organizationUuid: OrganizationUu
   const supabase = createClient();
   // console.log("Fetching events for organization UUID:", organizationUuid);
   try {
-    const { data: events, error } = await supabase.rpc(
-      "get_events_by_organization",
-      { org_id: organizationUuid }
-    );
+    const { data: events, error } = await supabase.rpc("get_events_by_organization", {
+      org_id: organizationUuid,
+    });
 
     if (error) throw error;
     // console.log("Fetched events:", events);
@@ -176,7 +184,9 @@ export async function fetchEventsByOrganization(organizationUuid: OrganizationUu
   }
 }
 
-export async function fetchOrganizationBySlug(slug: string): Promise<Organization | null> {
+export async function fetchOrganizationBySlug(
+  slug: string
+): Promise<Organization | null> {
   const supabase = createClient();
   // console.log("Fetching organization by slug:", slug);
   try {
@@ -189,22 +199,29 @@ export async function fetchOrganizationBySlug(slug: string): Promise<Organizatio
     // console.log("Fetched organization:", organization);
     return organization.length > 0 ? organization[0] : null;
   } catch (error) {
-    console.error("Error fetching organization by slug:", (error as Error).message);
+    // console.error("Error fetching organization by slug:", (error as Error).message);
     return null;
   }
 }
-
 export async function check_permissions(
-  userid: string,
   org_id: string,
-  perm_key: string
+  perm_key: string,
+  userid: string
 ) {
   const supabase = createClient();
+  // console.log(
+  //   "Checking permissions for organization:",
+  //   org_id,
+  //   "permission key:",
+  //   perm_key,
+  //   " user:",
+  //   userid
+  // );
 
   const { data, error } = await supabase.rpc("check_org_permissions", {
-    p_user_id: userid,
     p_org_id: org_id,
     p_perm_key: perm_key,
+    p_user_id: userid,
   });
 
   if (error) {
@@ -212,5 +229,6 @@ export async function check_permissions(
     return null;
   }
 
+  console.log("Permissions check result:", data);
   return data;
 }

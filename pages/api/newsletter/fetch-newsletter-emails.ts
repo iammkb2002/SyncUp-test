@@ -41,11 +41,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: "Organization name and slug are required" });
     }
 
-    console.log("Connecting to IMAP server with config:", imapConfig);
+    // console.log("Connecting to IMAP server with config:", imapConfig);
     const connection = await imaps.connect(imapConfig);
 
     const mailboxes = ["INBOX", "[Gmail]/Sent Mail"];
-    console.log("IMAP server connected successfully. Mailboxes:", mailboxes);
+    // console.log("IMAP server connected successfully. Mailboxes:", mailboxes);
 
     const allEmails: Email[] = [];
 
@@ -53,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await fs.mkdir(attachmentsDir, { recursive: true });
 
     for (const mailbox of mailboxes) {
-      console.log(`Fetching emails from mailbox: ${mailbox}`);
+      // console.log(`Fetching emails from mailbox: ${mailbox}`);
       await connection.openBox(mailbox);
 
       const searchCriteria = ["ALL"];
@@ -66,7 +66,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (rawEmail) {
           const parsedEmail: ParsedMail = await simpleParser(rawEmail);
-          console.log(`Parsed email from ${mailbox}: ${parsedEmail.subject}`);
+          // console.log(`Parsed email from ${mailbox}: ${parsedEmail.subject}`);
 
           let isRelevant = false;
 
@@ -100,7 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             if (!downloadedAttachments.has(sanitizedFilename)) {
               try {
-                console.log(`Saving attachment to ${filePath}`);
+                // console.log(`Saving attachment to ${filePath}`);
                 await fs.writeFile(filePath, attachment.content);
                 downloadedAttachments.add(sanitizedFilename);
 
@@ -134,9 +134,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    console.log("Closing IMAP connection...");
+    // console.log("Closing IMAP connection...");
     connection.end();
-    console.log("IMAP connection closed successfully.");
+    // console.log("IMAP connection closed successfully.");
 
     await cleanupOldAttachments(attachmentsDir, downloadedAttachments);
 
