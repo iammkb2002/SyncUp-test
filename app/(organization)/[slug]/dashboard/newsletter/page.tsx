@@ -374,9 +374,37 @@ export default function NewsletterPage() {
   ];
 
   const customStyles = {
-    header: { style: { backgroundColor: "#1f1f1f", color: "#ffffff" } },
-    headRow: { style: { backgroundColor: "#333333", color: "#ffffff" } },
-    headCells: { style: { color: "#ffffff" } },
+    header: {
+      style: {
+        backgroundColor: "#1f1f1f",
+        color: "#ffffff",
+        tableLayout: "fixed" as "fixed", // Fixed table layout
+        width: "100%", // Full width
+      },
+    },
+    headRow: {
+      style: {
+        backgroundColor: "#333333",
+        color: "#ffffff",
+      },
+    },
+    headCells: {
+      style: {
+        color: "#ffffff",
+        minWidth: "150px", // Ensures header cells don't collapse
+        whiteSpace: "nowrap", // Prevents text from wrapping
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+      },
+    },
+    cells: {
+      style: {
+        minWidth: "150px", // Ensures cells maintain minimum width
+        whiteSpace: "nowrap", // Prevents text from wrapping
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+      },
+    },
     rows: {
       style: {
         backgroundColor: "#2a2a2a",
@@ -384,8 +412,21 @@ export default function NewsletterPage() {
         "&:hover": { backgroundColor: "#3e3e3e" },
       },
     },
-    pagination: { style: { backgroundColor: "#1f1f1f", color: "#ffffff" } },
-    noData: { style: { backgroundColor: "#1f1f1f", color: "#ffffff" } },
+    pagination: {
+      style: {
+        backgroundColor: "#1f1f1f",
+        color: "#ffffff",
+        justifyContent: "center", // Centers pagination controls
+      },
+    },
+    noData: {
+      style: {
+        backgroundColor: "#1f1f1f",
+        color: "#ffffff",
+        tableLayout: "fixed" as "fixed", // Consistent layout for no data
+        width: "100%", // Full width
+      },
+    },
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -444,7 +485,7 @@ export default function NewsletterPage() {
       )}
       {hasPermission === true && (
         <>
-          <div className="bg-raisin mb-40 max-w-full space-y-6 rounded-lg p-10 font-sans text-white">
+          <div className="bg-raisin mb-40 w-full max-w-full space-y-6 rounded-lg p-10 font-sans text-white">
             <h1 className="border-b-2 border-primary pb-4 text-3xl">
               Newsletter Creation
             </h1>
@@ -549,6 +590,8 @@ export default function NewsletterPage() {
                           setSelectedEvents(state.selectedRows)
                         }
                         pagination
+                        fixedHeader
+                        fixedHeaderScrollHeight="400px"
                         customStyles={customStyles}
                         noDataComponent={<div>There are no records to display</div>}
                         progressPending={eventsLoading}
@@ -595,6 +638,8 @@ export default function NewsletterPage() {
                           setSelectedUsers(state.selectedRows)
                         }
                         pagination
+                        fixedHeader
+                        fixedHeaderScrollHeight="400px"
                         customStyles={customStyles}
                         noDataComponent={<div>There are no records to display</div>}
                         progressPending={usersLoading}
@@ -679,6 +724,8 @@ export default function NewsletterPage() {
                       columns={outgoingEmailColumns}
                       data={filteredSentEmails}
                       pagination
+                      fixedHeader
+                      fixedHeaderScrollHeight="400px"
                       customStyles={customStyles}
                       noDataComponent={<div>There are no records to display</div>}
                       progressPending={emailsLoading}
@@ -706,6 +753,8 @@ export default function NewsletterPage() {
                       columns={incomingEmailColumns}
                       data={filteredIncomingEmails}
                       pagination
+                      fixedHeader
+                      fixedHeaderScrollHeight="400px"
                       customStyles={customStyles}
                       noDataComponent={<div>There are no records to display</div>}
                       progressPending={emailsLoading}
