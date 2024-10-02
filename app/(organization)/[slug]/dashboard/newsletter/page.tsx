@@ -13,7 +13,7 @@ import { Event } from "@/types/event";
 import { CombinedUserData } from "@/types/combined_user_data";
 import { useParams } from "next/navigation";
 import React, { useEffect, useState, Fragment, useMemo, useRef } from "react";
-import DataTable, { TableColumn } from "react-data-table-component";
+import DataTable, { TableColumn, TableStyles } from "react-data-table-component";
 import dynamic from "next/dynamic";
 import { Disclosure, Dialog, Transition, Tab } from "@headlessui/react";
 import { ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/20/solid";
@@ -374,11 +374,11 @@ export default function NewsletterPage() {
     },
   ];
 
-  // Updated customStyles
-  const customStyles = {
+  // Updated customStyles with explicit typing
+  const customStyles: TableStyles = {
     table: {
       style: {
-        tableLayout: "fixed" as "fixed",
+        tableLayout: "fixed", // Type is now correctly inferred
         width: "100%",
       },
     },
@@ -424,6 +424,7 @@ export default function NewsletterPage() {
       },
     },
   };
+
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => setAttachments((prev) => [...prev, ...acceptedFiles]),
