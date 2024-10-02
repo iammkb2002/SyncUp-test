@@ -43,11 +43,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     console.log("Connecting to IMAP server with config:", imapConfig);
     const connection = await imaps.connect(imapConfig);
+
     const mailboxes = ["INBOX", "[Gmail]/Sent Mail"];
     console.log("IMAP server connected successfully. Mailboxes:", mailboxes);
 
     const allEmails: Email[] = [];
-    const attachmentsDir = path.join(process.cwd(), 'attachments');
+
+    const attachmentsDir = path.join('/tmp', 'attachments');  // Changed to /tmp directory
     await fs.mkdir(attachmentsDir, { recursive: true });
 
     for (const mailbox of mailboxes) {
@@ -67,6 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           console.log(`Parsed email from ${mailbox}: ${parsedEmail.subject}`);
 
           let isRelevant = false;
+
           if (mailbox === "[Gmail]/Sent Mail") {
             if (parsedEmail.from && parsedEmail.from.value) {
               isRelevant = parsedEmail.from.value.some(
@@ -78,6 +81,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               const toAddresses = Array.isArray(parsedEmail.to)
                 ? parsedEmail.to
                 : [parsedEmail.to];
+
               isRelevant = toAddresses.some(
                 (address) => address.text && address.text.includes(`+${organizationSlug}@gmail.com`)
               );

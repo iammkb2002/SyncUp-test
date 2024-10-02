@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const sanitizedFilename = path.basename(filename as string);
-    const attachmentsDir = path.join(process.cwd(), 'attachments');
+    const attachmentsDir = path.join('/tmp', 'attachments');  // Changed to /tmp directory
     const filePath = path.join(attachmentsDir, sanitizedFilename);
 
     if (!fs.existsSync(filePath)) {
@@ -20,6 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const fileBuffer = await fs.promises.readFile(filePath);
     const ext = path.extname(sanitizedFilename).toLowerCase();
+
     const mimeTypes: { [key: string]: string } = {
       '.pdf': 'application/pdf',
       '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -30,11 +31,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       '.txt': 'text/plain',
       '.csv': 'text/csv',
     };
+
     const mimeType = mimeTypes[ext] || 'application/octet-stream';
 
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Disposition', `attachment; filename="${sanitizedFilename}"`);
-
     res.send(fileBuffer);
   } catch (error: any) {
     console.error('Error fetching attachment:', error);
