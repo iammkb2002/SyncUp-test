@@ -115,12 +115,15 @@ export default function NewsletterPage() {
           organizationSlug
         );
 
-        const emailsResponse = await axios.get("/api/newsletter/fetch-newsletter-emails", {
-          params: {
-            organizationName,
-            organizationSlug,
-          },
-        });
+        const emailsResponse = await axios.get(
+          "/api/newsletter/fetch-newsletter-emails",
+          {
+            params: {
+              organizationName,
+              organizationSlug,
+            },
+          }
+        );
         const allEmails: { emails: Email[] } = emailsResponse.data;
         console.log("Fetched emails:", allEmails);
 
@@ -220,9 +223,13 @@ export default function NewsletterPage() {
           formData.append("message", editorState);
           attachments.forEach((file) => formData.append("attachments", file));
 
-          const response = await axios.post("/api/newsletter/send-newsletter-email", formData, {
-            headers: { "Content-Type": "multipart/form-data" },
-          });
+          const response = await axios.post(
+            "/api/newsletter/send-newsletter-email",
+            formData,
+            {
+              headers: { "Content-Type": "multipart/form-data" },
+            }
+          );
 
           if (response.status === 200) {
             setSuccessMessage("Newsletter sent successfully!");
@@ -245,18 +252,29 @@ export default function NewsletterPage() {
   };
 
   const eventColumns: TableColumn<Event>[] = [
-    { name: "Title", selector: (row: Event) => row.title, sortable: true, id: "title" },
+    {
+      name: "Title",
+      selector: (row: Event) => row.title,
+      sortable: true,
+      id: "title",
+      wrap: true, // Ensure proper wrapping
+      grow: 1, // Ensure the column takes available space
+    },
     {
       name: "Location",
       selector: (row: Event) => row.location,
       sortable: true,
       id: "location",
+      wrap: true,
+      grow: 1,
     },
     {
       name: "Date",
       selector: (row: Event) => new Date(row.starteventdatetime).toLocaleString(),
       sortable: true,
       id: "startDate",
+      wrap: true,
+      grow: 1,
     },
   ];
 
@@ -266,18 +284,24 @@ export default function NewsletterPage() {
       selector: (row: CombinedUserData) => row.email || "",
       sortable: true,
       id: "email",
+      wrap: true,
+      grow: 1,
     },
     {
       name: "First Name",
       selector: (row: CombinedUserData) => row.first_name || "",
       sortable: true,
       id: "firstName",
+      wrap: true,
+      grow: 1,
     },
     {
       name: "Last Name",
       selector: (row: CombinedUserData) => row.last_name || "",
       sortable: true,
       id: "lastName",
+      wrap: true,
+      grow: 1,
     },
   ];
 
@@ -287,18 +311,24 @@ export default function NewsletterPage() {
       selector: (row: Email) => row.subject,
       sortable: true,
       id: "subject",
+      wrap: true,
+      grow: 1,
     },
     {
       name: "To",
       selector: (row: Email) => row.to.join(", "),
       sortable: true,
       id: "to",
+      wrap: true,
+      grow: 1,
     },
     {
       name: "Date",
       selector: (row: Email) => new Date(row.date).toLocaleString(),
       sortable: true,
       id: "date",
+      wrap: true,
+      grow: 1,
     },
     {
       name: "Actions",
@@ -320,18 +350,24 @@ export default function NewsletterPage() {
       selector: (row: Email) => row.subject,
       sortable: true,
       id: "subject",
+      wrap: true, // Ensure proper wrapping
+      grow: 1, // Ensure the column takes available space
     },
     {
       name: "From",
       selector: (row: Email) => row.from,
       sortable: true,
       id: "from",
+      wrap: true,
+      grow: 1,
     },
     {
       name: "Date",
       selector: (row: Email) => new Date(row.date).toLocaleString(),
       sortable: true,
       id: "date",
+      wrap: true,
+      grow: 1,
     },
     {
       name: "Actions",
@@ -348,18 +384,56 @@ export default function NewsletterPage() {
   ];
 
   const customStyles = {
-    header: { style: { backgroundColor: "#1f1f1f", color: "#ffffff" } },
-    headRow: { style: { backgroundColor: "#333333", color: "#ffffff" } },
-    headCells: { style: { color: "#ffffff" } },
+    header: {
+      style: {
+        backgroundColor: "#1f1f1f",
+        color: "#ffffff",
+        display: "table", // Ensure headers behave like table headers
+      },
+    },
+    headRow: {
+      style: {
+        backgroundColor: "#333333",
+        color: "#ffffff",
+        display: "table-row",
+      },
+    },
+    headCells: {
+      style: {
+        color: "#ffffff",
+        display: "table-cell",
+        whiteSpace: "nowrap", // Prevent header wrapping in production
+      },
+    },
     rows: {
       style: {
         backgroundColor: "#2a2a2a",
         color: "#ffffff",
+        display: "table-row", // Ensure rows behave like table rows
         "&:hover": { backgroundColor: "#3e3e3e" },
       },
     },
-    pagination: { style: { backgroundColor: "#1f1f1f", color: "#ffffff" } },
-    noData: { style: { backgroundColor: "#1f1f1f", color: "#ffffff" } },
+    cells: {
+      style: {
+        display: "table-cell", // Ensure cells behave like table cells
+        whiteSpace: "normal", // Ensure proper wrapping
+      },
+    },
+    pagination: {
+      style: {
+        backgroundColor: "#1f1f1f",
+        color: "#ffffff",
+        display: "flex",
+        justifyContent: "center",
+      },
+    },
+    noData: {
+      style: {
+        backgroundColor: "#1f1f1f",
+        color: "#ffffff",
+        textAlign: "center" as "center",
+      },
+    },
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
