@@ -115,7 +115,7 @@ export default function NewsletterPage() {
           organizationSlug
         );
 
-        const emailsResponse = await axios.get("/api/fetch-newsletter-emails", {
+        const emailsResponse = await axios.get("/api/newsletter/fetch-newsletter-emails", {
           params: {
             organizationName,
             organizationSlug,
@@ -220,7 +220,7 @@ export default function NewsletterPage() {
           formData.append("message", editorState);
           attachments.forEach((file) => formData.append("attachments", file));
 
-          const response = await axios.post("/api/send-newsletter-email", formData, {
+          const response = await axios.post("/api/newsletter/send-newsletter-email", formData, {
             headers: { "Content-Type": "multipart/form-data" },
           });
 
