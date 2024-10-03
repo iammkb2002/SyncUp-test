@@ -1,438 +1,702 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
-import { Event } from "@/types/event";
-import { CombinedUserData } from "@/types/combined_user_data";
-import DataTable, { TableColumn, TableStyles } from "react-data-table-component";
-import dynamic from "next/dynamic";
-import { Disclosure } from "@headlessui/react";
-import { ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/20/solid";
-import { z } from "zod";
-import axios from "axios";
-import { useDropzone } from "react-dropzone";
-import { fetchMembersByEvent, check_permissions } from "@/lib/newsletter_actions";
-import { useUser } from "@/context/user_context";
+import React, { useEffect, useMemo, useState, Fragment } from "react";
+import { Organization } from "@/types/organization";
+import DataTable, { TableColumn } from "react-data-table-component";
+import { useDebounce } from "use-debounce";
+import { Dialog, Transition } from "@headlessui/react";
+import { XMarkIcon } from "@heroicons/react/20/solid";
 import Swal from "sweetalert2";
+import { createClient } from "@/lib/supabase/client";
+import { getUser } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
+import Preloader from "@/components/preloader";
+import ActivityFeed from "@/components/activity_feed";
+import { Activity } from "@/types/activities";
+import { isActiveMember } from "@/lib/track";
 
-const RichTextEditor = dynamic(() => import("@mantine/rte"), { ssr: false });
+const supabase = createClient();
 
-interface NewsletterCreationProps {
-  organizationName: string;
-  organizationId: string;
-  events: Event[];
-  users: CombinedUserData[];
+interface OrganizationMember {
+  organizationmemberid: string;
+  organizationid: string;
+  userid: string;
+  membershipid: string | null;
+  roleid: string;
+  joindate: string;
+  enddate: string | null;
+  expiration_date: string | null;
+  organization_slug: string;
+  organization: any;
+  user: {
+    gender: string;
+    userid: string;
+    company: string;
+    website: string;
+    last_name: string;
+    updatedat: string;
+    first_name: string;
+    dateofbirth: string | null;
+    description: string;
+    profilepicture: string;
+  };
+  membership: {
+    name: string | null;
+    features: any | null;
+    description: string | null;
+    membershipid: string | null;
+    yearlydiscount: number | null;
+    registrationfee: number | null;
+  };
+  role: {
+    role: string;
+    color: string;
+    roleid: string;
+    editable: boolean;
+    deletable: boolean;
+  };
+  payments?: {
+    type: string;
+    amount: number;
+    status: string;
+    invoiceId: string;
+    paymentId: string;
+    created_at: string;
+    invoiceUrl: string;
+  }[];
 }
 
-const newsletterSchema = z.object({
-  subject: z.string().min(1, "Subject is required"),
-  content: z.string().min(1, "Content is required"),
-});
-
-function classNames(...classes: string[]) {
-  return classes.filter(Boolean).join(" ");
+interface MemberTableData extends OrganizationMember {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  status: 'Active' | 'Inactive';
 }
 
-const customStyles: TableStyles = {
-  header: {
-    style: {
-      backgroundColor: "rgb(36, 36, 36)",
-      color: "rgb(255, 255, 255)",
-    },
-  },
-  subHeader: {
-    style: {
-      backgroundColor: "none",
-      color: "rgb(255, 255, 255)",
-      padding: 0,
-      marginBottom: 10,
-    },
-  },
-  rows: {
-    style: {
-      minHeight: "6vh",
-      backgroundColor: "rgb(33, 33, 33)",
-      color: "rgb(255, 255, 255)",
-      "&:hover": { backgroundColor: "rgb(36, 36, 36)" },
-    },
-  },
-  headCells: {
-    style: {
-      backgroundColor: "rgb(36, 36, 36)",
-      color: "rgb(255, 255, 255)",
-      whiteSpace: "nowrap",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      padding: "8px",
-    },
-  },
-  cells: {
-    style: {
-      backgroundColor: "rgb(33, 33, 33)",
-      color: "rgb(255, 255, 255)",
-      whiteSpace: "nowrap",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      padding: "8px",
-    },
-  },
-  pagination: {
-    style: {
-      backgroundColor: "rgb(33, 33, 33)",
-      color: "rgb(255, 255, 255)",
-      justifyContent: "center",
-    },
-  },
-  noData: {
-    style: {
-      backgroundColor: "transparent",
-      color: "rgb(255, 255, 255)",
-    },
-  },
-};
+interface MembersTableAllProps {
+  members: OrganizationMember[];
+  organizations: Organization[];
+}
 
-const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
-  organizationName,
-  organizationId,
-  events,
-  users,
+const MembersTableAll: React.FC<MembersTableAllProps> = ({
+  members,
+  organizations,
 }) => {
-  const { user } = useUser();
-
-  const [hasPermission, setHasPermission] = useState(false);
-  const [editorState, setEditorState] = useState("");
-  const [subject, setSubject] = useState("");
-  const [selectedUsers, setSelectedUsers] = useState<CombinedUserData[]>([]);
-  const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
-  const [attachments, setAttachments] = useState<File[]>([]);
-  const [sending, setSending] = useState(false);
-  const [eventsSearch, setEventsSearch] = useState("");
-  const [usersSearch, setUsersSearch] = useState("");
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: (acceptedFiles) => setAttachments((prev) => [...prev, ...acceptedFiles]),
-  });
+  const [tableData, setTableData] = useState<MemberTableData[]>([]);
+  const [filterText, setFilterText] = useState<string>("");
+  const [debouncedFilterText] = useDebounce(filterText, 300);
+  const [selectedOrganization, setSelectedOrganization] = useState<string>("All");
+  const [filteredOrganization, setFilteredOrganization] = useState<string>("All");
+  const [isMounted, setIsMounted] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<MemberTableData | null>(
+    null
+  );
+  const router = useRouter();
+  const [userActivities, setUserActivities] = useState<Activity[]>([]);
 
   useEffect(() => {
-    async function checkUserPermissions() {
-      const permission = await check_permissions(
-        organizationId,
-        "send_newsletters",
-        user?.id || ""
-      );
-      setHasPermission(permission);
-    }
-    checkUserPermissions();
-  }, [user, organizationId]);
+    const fetchMemberStatus = async () => {
+      setIsMounted(true);
+      if (members.length) {
+        const data = await Promise.all(members.map(async (member) => {
+          const isActive = await isActiveMember(member.userid, member.organizationid);
+          return {
+            ...member,
+            status: isActive ? 'Active' : 'Inactive',
+            open: false,
+            setOpen: (open: boolean) => {
+              setTableData((prevData) =>
+                prevData.map((item) =>
+                  item.organizationmemberid === member.organizationmemberid
+                    ? { ...item, open }
+                    : item
+                )
+              );
+            },
+          };
+        }));
+        setTableData(data as MemberTableData[]);
+      }
+    };
 
-  const removeAttachment = (index: number) => {
-    setAttachments((prev) => prev.filter((_, i) => i !== index));
+    fetchMemberStatus();
+  }, [members]);
+
+  useEffect(() => {
+    if (selectedMember) {
+      fetchUserActivities(selectedMember.userid);
+    }
+  }, [selectedMember]);
+
+  const fetchUserActivities = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('activities')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      console.error("Error fetching user activities:", error);
+    } else {
+      setUserActivities(data || []);
+    }
   };
 
-  const validateForm = () => {
-    try {
-      const formData = { subject, content: editorState };
-      newsletterSchema.parse(formData);
+  // Define the columns including the new "Organization" column
+  const columns: TableColumn<MemberTableData>[] = [
+    {
+      name: "Name",
+      selector: (row: MemberTableData) =>
+        `${row.user.first_name} ${row.user.last_name}`,
+      sortable: true,
+    },
+    {
+      name: "Role",
+      selector: (row: MemberTableData) => row.role.role,
+      sortable: true,
+      cell: (row: MemberTableData) => (
+        <span
+          className={`border-2 rounded-2xl px-4 py-1 text-xs`}
+          style={{
+            borderColor: row.role.color,
+            backgroundColor: `${row.role.color}33`,
+            color: row.role.color,
+          }}
+        >
+          {row.role.role}
+        </span>
+      ),
+    },
+    {
+      name: "Organization",
+      selector: (row: MemberTableData) =>
+        organizations.find((org) => org.organizationid === row.organizationid)
+          ?.name || "N/A",
+      sortable: true,
+    },
+    {
+      name: "Join Date",
+      selector: (row: MemberTableData) => row.joindate,
+      sortable: true,
+      cell: (row: MemberTableData) =>
+        new Date(row.joindate).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "numeric",
+          hour12: true,
+        }),
+    },
+    {
+      name: "Membership",
+      selector: (row: MemberTableData) => row.membership.name ?? "N/A",
+      sortable: true,
+    },
+    {
+      name: "Status",
+      selector: (row: MemberTableData) => row.status,
+      sortable: true,
+      cell: (row: MemberTableData) => (
+        <span
+          className={`w-20 text-center bg-charleston cursor-pointer rounded-2xl border-2 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-primar ${
+            row.status === 'Active' ? 'bg-green-600/25 text-green-300 border-green-700 focus:border-green-700 focus:outline-none focus:ring-green-700' : 'bg-red-600/25 text-red-300 border-red-700  focus:border-red-700 focus:outline-none focus:ring-red-700'
+          }`}
+        >
+          {row.status}
+        </span>
+      ),
+    },
+  ];
 
-      if (selectedUsers.length === 0 && selectedEvents.length === 0) {
-        Swal.fire("Error", "At least one recipient is required", "error");
-        return false;
-      }
-
-      return true;
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        Swal.fire("Validation Error", err.errors.map((e) => e.message).join(", "), "error");
-      }
-      return false;
-    }
+  const handleRowClick = (row: MemberTableData) => {
+    setSelectedMember(row);
   };
 
-  const handleSendNewsletter = async () => {
-    if (!validateForm()) return;
+  // Filter data based on search text and selected organization
+  const filteredData = useMemo(() => {
+    return tableData.filter((item) => {
+      const matchesSearch =
+        !debouncedFilterText ||
+        `${item.user.first_name} ${item.user.last_name}`
+          .toLowerCase()
+          .includes(debouncedFilterText.toLowerCase());
 
-    setSending(true);
-    try {
-      const selectedEventUsers = await Promise.all(
-        selectedEvents.map((event) => fetchMembersByEvent(event.eventid))
-      ).then((results) => results.flat());
+      const matchesOrganization =
+        selectedOrganization === "All" ||
+        item.organizationid === selectedOrganization;
 
-      const combinedUsers = [...selectedUsers, ...selectedEventUsers];
-      const uniqueUsers = combinedUsers.filter(
-        (user, index, self) => index === self.findIndex((t) => t.email === user.email)
-      );
+      return matchesSearch && matchesOrganization;
+    });
+  }, [debouncedFilterText, selectedOrganization, tableData]);
 
-      if (uniqueUsers.length === 0) {
-        Swal.fire("Error", "At least one recipient is required.", "error");
-        setSending(false);
-        return;
-      }
+  const subHeaderComponent = (
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full">
+      {/* Search Bar */}
+      <input
+        type="text"
+        placeholder="Search by name..."
+        value={filterText}
+        onChange={(e) => setFilterText(e.target.value)}
+        className="block rounded-md border border-[#525252] bg-charleston px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-primary sm:text-sm mb-2 sm:mb-0"
+      />
 
-      const formData = new FormData();
-      formData.append("fromName", organizationName);
-      formData.append("replyToExtension", organizationId);
-      formData.append("recipients", JSON.stringify(uniqueUsers.map((u) => u.email)));
-      formData.append("subject", subject);
-      formData.append("message", editorState);
-      attachments.forEach((file) => formData.append("attachments", file));
+      {/* Organization Dropdown */}
+      <select
+        value={selectedOrganization}
+        onChange={(e) => setSelectedOrganization(e.target.value)}
+        className="block rounded-md border border-[#525252] bg-charleston px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-primary sm:text-sm"
+      >
+        <option value="All">All Organizations</option>
+        {organizations.map((org) => (
+          <option key={org.organizationid} value={org.organizationid}>
+            {org.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
-      const response = await axios.post(
-        "/api/newsletter/send-newsletter-email",
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
+  const handleRemoveMember = async (
+    organizationMemberId: string,
+    userId: string,
+    role: string
+  ) => {
+    const { user } = await getUser(); // Get the currently logged-in user
+
+    // Check if the member is the owner or the current user
+    if (role === "Owner") {
+      Swal.fire({
+        title: "Failed!",
+        text: "You can't remove a member with the Owner role.",
+        icon: "error",
+      });
+      return;
+    }
+
+    if (user?.id === userId) {
+      Swal.fire({
+        title: "Failed!",
+        text: "You can't remove your own account.",
+        icon: "error",
+      });
+      return;
+    }
+
+    // Show a confirmation dialog
+    const confirmResult = await Swal.fire({
+      title: "Are you sure?",
+      text: "You won't be able to revert this!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#3085d6",
+      cancelButtonColor: "#d33",
+      confirmButtonText: "Yes, remove member!",
+    });
+
+    if (confirmResult.isConfirmed) {
+      try {
+        // Call Supabase to remove the member
+        const { error } = await supabase
+          .from("organizationmembers")
+          .delete()
+          .eq("organizationmemberid", organizationMemberId);
+
+        if (error) {
+          throw new Error(error.message);
         }
-      );
 
-      if (response.status === 200) {
-        Swal.fire("Success", "Newsletter sent successfully!", "success");
-        setAttachments([]);
-        setSubject("");
-        setEditorState("");
-        setSelectedUsers([]);
-        setSelectedEvents([]);
-      } else {
-        Swal.fire("Error", "Failed to send newsletter.", "error");
+        Swal.fire(
+          "Removed!",
+          "The member has been removed from the organization.",
+          "success"
+        );
+
+        // Update the table data
+        setTableData((prevData) =>
+          prevData.filter(
+            (member) => member.organizationmemberid !== organizationMemberId
+          )
+        );
+        setSelectedMember(null);
+
+        // Refresh the page to get updated data from the server
+        router.refresh();
+      } catch (error) {
+        Swal.fire({
+          title: "Error!",
+          text: "There was an error removing the member: " + (error as Error).message,
+          icon: "error",
+        });
       }
-    } catch (error: any) {
-      Swal.fire("Error", error.response?.data?.message || "Failed to send newsletter.", "error");
-    } finally {
-      setSending(false);
     }
   };
 
-  const eventColumns: TableColumn<Event>[] = [
-    {
-      name: "Title",
-      selector: (row: Event) => row.title,
-      sortable: true,
-      id: "title",
-      width: "150px",
-    },
-    {
-      name: "Location",
-      selector: (row: Event) => row.location,
-      sortable: true,
-      id: "location",
-      width: "120px",
-    },
-    {
-      name: "Date",
-      selector: (row: Event) => new Date(row.starteventdatetime).toLocaleDateString(),
-      sortable: true,
-      id: "startDate",
-      width: "140px",
-    },
-  ];
-
-  const userColumns: TableColumn<CombinedUserData>[] = [
-    {
-      name: "Email",
-      selector: (row: CombinedUserData) => row.email || "",
-      sortable: true,
-      id: "email",
-      width: "200px",
-    },
-    {
-      name: "First Name",
-      selector: (row: CombinedUserData) => row.first_name || "",
-      sortable: true,
-      id: "firstName",
-      width: "120px",
-    },
-    {
-      name: "Last Name",
-      selector: (row: CombinedUserData) => row.last_name || "",
-      sortable: true,
-      id: "lastName",
-      width: "120px",
-    },
-  ];
-
-  const filteredEvents = useMemo(() => {
-    if (!eventsSearch) return events;
-    return events.filter((event) =>
-      Object.values(event).join(" ").toLowerCase().includes(eventsSearch.toLowerCase())
-    );
-  }, [events, eventsSearch]);
-
-  const filteredUsers = useMemo(() => {
-    if (!usersSearch) return users;
-    return users.filter((user) =>
-      Object.values(user).join(" ").toLowerCase().includes(usersSearch.toLowerCase())
-    );
-  }, [users, usersSearch]);
+  if (!isMounted) {
+    return <Preloader />;
+  }
 
   return (
-    <div className="p-4 bg-[#1f1f1f] rounded-lg shadow-lg max-w-6xl mx-auto">
-      {!hasPermission ? (
-        <div className="text-red-500 text-center text-lg font-semibold">
-          You do not have permission to send newsletters.
+    <div className="px-4 sm:px-6 lg:px-8">
+      <div className="sm:flex sm:items-center">
+        <div className="sm:flex-auto">
+          <h1 className="text-base font-semibold leading-6 text-light">
+            Organization Members
+          </h1>
+          <p className="mt-2 text-sm text-light">
+            A list of all the members across organizations including their name, role,
+            join date, and membership details.
+          </p>
         </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="flex flex-col space-y-4">
-              <input
-                className="w-full p-3 rounded border bg-charleston text-sm text-white placeholder-gray-400 focus:border-primary focus:ring focus:ring-primary-light"
-                type="text"
-                placeholder="Subject*"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-              />
-              <RichTextEditor
-                value={editorState}
-                onChange={setEditorState}
-                className="rounded border border-primary text-white p-3 h-40"
-                styles={{
-                  root: {
-                    backgroundColor: "#2a2a2a",
-                    color: "#ffffff",
-                    "&:hover": {
-                      backgroundColor: "#3a3a3a",
-                    },
-                  },
-                  toolbar: { backgroundColor: "#2a2a2a", borderColor: "#444444", padding: "4px" },
-                  toolbarControl: {
-                    backgroundColor: "#2a2a2a",
-                    "&:hover": {
-                      backgroundColor: "#3a3a3a",
-                    },
-                  },
-                }}
-              />
-              <div>
-                <h2 className="text-md font-semibold text-white">Attachments</h2>
-                <div
-                  {...getRootProps()}
-                  className={`mt-2 cursor-pointer rounded border-2 border-dashed p-4 text-center text-sm text-gray-400 ${
-                    isDragActive ? "border-primary text-primary" : "border-gray-500"
-                  }`}
+      </div>
+      <div className="mt-8">
+        {tableData.length > 0 ? (
+          <DataTable
+            columns={columns}
+            data={filteredData}
+            pagination
+            highlightOnHover
+            subHeader
+            subHeaderComponent={subHeaderComponent}
+            customStyles={{
+              header: {
+                style: {
+                  backgroundColor: "rgb(36, 36, 36)",
+                  color: "rgb(255, 255, 255)",
+                },
+              },
+              subHeader: {
+                style: {
+                  backgroundColor: "none",
+                  color: "rgb(255, 255, 255)",
+                  padding: 0,
+                  marginBottom: 10,
+                },
+              },
+              rows: {
+                style: {
+                  minHeight: "6vh",
+                  backgroundColor: "rgb(33, 33, 33)",
+                  color: "rgb(255, 255, 255)",
+                },
+              },
+              headCells: {
+                style: {
+                  backgroundColor: "rgb(36, 36, 36)",
+                  color: "rgb(255, 255, 255)",
+                },
+              },
+              cells: {
+                style: {
+                  backgroundColor: "rgb(33, 33, 33)",
+                  color: "rgb(255, 255, 255)",
+                },
+              },
+              pagination: {
+                style: {
+                  backgroundColor: "rgb(33, 33, 33)",
+                  color: "rgb(255, 255, 255)",
+                },
+              },
+            }}
+            onRowClicked={(row) => handleRowClick(row as MemberTableData)}
+            pointerOnHover
+          />
+        ) : (
+          <Preloader />
+        )}
+      </div>
+
+      {/* Member Details Dialog */}
+      <Transition.Root show={!!selectedMember} as={Fragment}>
+        <Dialog
+          as="div"
+          className="relative z-50"
+          onClose={() => setSelectedMember(null)}
+        >
+          <Transition.Child
+            as={Fragment}
+            enter="ease-in-out duration-500"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in-out duration-500"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-hidden">
+            <div className="absolute inset-0 overflow-hidden">
+              <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10">
+                <Transition.Child
+                  as={Fragment}
+                  enter="transform transition ease-in-out duration-500 sm:duration-700"
+                  enterFrom="translate-x-full"
+                  enterTo="translate-x-0"
+                  leave="transform transition ease-in-out duration-500 sm:duration-700"
+                  leaveFrom="translate-x-0"
+                  leaveTo="translate-x-full"
                 >
-                  <input {...getInputProps()} />
-                  {isDragActive ? (
-                    <p>Drop the files here...</p>
-                  ) : (
-                    <p>Drag & drop files here, or click to select files</p>
-                  )}
-                </div>
-                {attachments.length > 0 && (
-                  <div className="mt-2">
-                    <h3 className="text-sm font-medium text-white">Selected Attachments:</h3>
-                    <ul className="mt-1 space-y-1">
-                      {attachments.map((file, index) => (
-                        <li
-                          key={index}
-                          className="flex justify-between items-center p-2 rounded bg-gray-700"
-                        >
-                          <span className="text-sm text-white">{file.name}</span>
-                          <button
-                            onClick={() => removeAttachment(index)}
-                            className="text-red-500 hover:text-red-700 text-xs"
-                          >
-                            Remove
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end mt-4">
-                <button
-                  onClick={handleSendNewsletter}
-                  className="w-40 rounded bg-primary py-2 text-sm text-white hover:bg-primary-dark focus:outline-none focus:ring focus:ring-primary-light disabled:opacity-50"
-                  disabled={sending}
-                >
-                  {sending ? "Sending..." : "Send Newsletter"}
-                </button>
-              </div>
-            </div>
-            <div className="flex flex-col space-y-4 bg-[#2a2a2a] p-4 rounded-lg">
-              <h2 className="text-lg font-semibold text-white">Select Recipients</h2>
-              <Disclosure>
-                {({ open }) => (
-                  <>
-                    <Disclosure.Button className="flex justify-between items-center w-full px-3 py-2 text-left text-sm font-medium rounded bg-[#333333] text-white focus:outline-none focus-visible:ring focus-visible:ring-opacity-75">
-                      <span>Events</span>
-                      {open ? (
-                        <ChevronUpIcon className="w-4 h-4 text-white" />
-                      ) : (
-                        <ChevronDownIcon className="w-4 h-4 text-white" />
-                      )}
-                    </Disclosure.Button>
-                    <Disclosure.Panel className="mt-2 space-y-2">
-                      <input
-                        type="text"
-                        placeholder="Search Events..."
-                        value={eventsSearch}
-                        onChange={(e) => setEventsSearch(e.target.value)}
-                        className="w-full p-2 rounded border bg-charleston text-sm text-white placeholder-gray-400 focus:border-primary focus:ring focus:ring-primary-light"
-                      />
-                      <div className="overflow-x-auto">
-                        <DataTable
-                          keyField="eventid"
-                          columns={eventColumns}
-                          data={filteredEvents}
-                          selectableRows
-                          onSelectedRowsChange={(state) => setSelectedEvents(state.selectedRows)}
-                          pagination
-                          fixedHeader
-                          fixedHeaderScrollHeight="200px"
-                          customStyles={customStyles}
-                          noDataComponent={<div className="text-center">No events found.</div>}
-                          defaultSortFieldId="startDate"
-                          defaultSortAsc={false}
-                        />
+                  <Dialog.Panel className="pointer-events-auto w-screen max-w-md">
+                    <div className="flex h-full flex-col overflow-y-scroll bg-eerieblack py-6 shadow-xl">
+                      <div className="px-4 sm:px-6">
+                        <div className="flex items-start justify-between">
+                          <Dialog.Title className="text-xl font-semibold leading-6 text-light">
+                            Member Details
+                          </Dialog.Title>
+                          <div className="ml-3 flex h-7 items-center">
+                            <button
+                              type="button"
+                              className="rounded-md text-gray-400 hover:text-light focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                              onClick={() => setSelectedMember(null)}
+                            >
+                              <span className="sr-only">Close panel</span>
+                              <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </Disclosure.Panel>
-                  </>
-                )}
-              </Disclosure>
-              <Disclosure>
-                {({ open }) => (
-                  <>
-                    <Disclosure.Button className="flex justify-between items-center w-full px-3 py-2 text-left text-sm font-medium rounded bg-[#333333] text-white focus:outline-none focus-visible:ring focus-visible:ring-opacity-75">
-                      <span>Individual Users</span>
-                      {open ? (
-                        <ChevronUpIcon className="w-4 h-4 text-white" />
-                      ) : (
-                        <ChevronDownIcon className="w-4 h-4 text-white" />
-                      )}
-                    </Disclosure.Button>
-                    <Disclosure.Panel className="mt-2 space-y-2">
-                      <input
-                        type="text"
-                        placeholder="Search Users..."
-                        value={usersSearch}
-                        onChange={(e) => setUsersSearch(e.target.value)}
-                        className="w-full p-2 rounded border bg-charleston text-sm text-white placeholder-gray-400 focus:border-primary focus:ring focus:ring-primary-light"
-                      />
-                      <div className="overflow-x-auto">
-                        <DataTable
-                          keyField="email"
-                          columns={userColumns}
-                          data={filteredUsers}
-                          selectableRows
-                          onSelectedRowsChange={(state) => setSelectedUsers(state.selectedRows)}
-                          pagination
-                          fixedHeader
-                          fixedHeaderScrollHeight="200px"
-                          customStyles={customStyles}
-                          noDataComponent={<div className="text-center">No users found.</div>}
-                          defaultSortFieldId="email"
-                          defaultSortAsc={false}
-                        />
+                      <div className="relative mt-6 flex-1 px-4 sm:px-6">
+                        {selectedMember && (
+                          <div className="space-y-6">
+                            {/* Personal Information */}
+                            <div className="rounded-lg bg-charleston p-4">
+                              <h3 className="mb-2 text-lg font-medium text-light">
+                                Personal Information
+                              </h3>
+                              <div className="space-y-2 text-gray-300">
+                                <p>
+                                  <span className="font-semibold">Name:</span>{" "}
+                                  {selectedMember.user.first_name}{" "}
+                                  {selectedMember.user.last_name}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">Gender:</span>{" "}
+                                  {selectedMember.user.gender}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">Date of Birth:</span>{" "}
+                                  {selectedMember.user.dateofbirth || "N/A"}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">Company:</span>{" "}
+                                  {selectedMember.user.company}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">Website:</span>{" "}
+                                  {selectedMember.user.website}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">Description:</span>{" "}
+                                  {selectedMember.user.description}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Organization Details */}
+                            <div className="rounded-lg bg-charleston p-4">
+                              <h3 className="mb-2 text-lg font-medium text-light">
+                                Organization Details
+                              </h3>
+                              <div className="space-y-2 text-gray-300">
+                                <p>
+                                  <span className="font-semibold">Role:</span>{" "}
+                                  {selectedMember.role.role}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">Join Date:</span>{" "}
+                                  {new Date(selectedMember.joindate).toLocaleString(
+                                    "en-US",
+                                    {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                      hour: "numeric",
+                                      minute: "numeric",
+                                      hour12: true,
+                                    }
+                                  )}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">End Date:</span>{" "}
+                                  {selectedMember.enddate
+                                    ? new Date(selectedMember.enddate).toLocaleString(
+                                        "en-US",
+                                        {
+                                          month: "short",
+                                          day: "numeric",
+                                          year: "numeric",
+                                          hour: "numeric",
+                                          minute: "numeric",
+                                          hour12: true,
+                                        }
+                                      )
+                                    : "N/A"}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Membership Information */}
+                            <div className="rounded-lg bg-charleston p-4">
+                              <h3 className="mb-2 text-lg font-medium text-light">
+                                Membership Information
+                              </h3>
+                              {selectedMember.membership.name ? (
+                                <div className="rounded-lg p-3">
+                                  <h3 className="text-xl font-semibold text-light">
+                                    {selectedMember.membership.name}
+                                  </h3>
+                                  <p className="mt-2 text-gray-400">
+                                    {selectedMember.membership.description}
+                                  </p>
+                                  <hr className="my-4 border-gray-600" />
+                                  <div className="mt-4 space-y-2">
+                                    <div className="flex justify-between">
+                                      <span className="font-semibold text-gray-300">
+                                        Yearly Discount:
+                                      </span>
+                                      <span className="text-light">
+                                        {selectedMember.membership.yearlydiscount}%
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="font-semibold text-gray-300">
+                                        Registration Fee:
+                                      </span>
+                                      <span className="text-light">
+                                        ₱{selectedMember.membership.registrationfee}
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="font-semibold text-gray-300">
+                                        Expiration Date:
+                                      </span>
+                                      <span className="text-light">
+                                        {selectedMember.expiration_date
+                                          ? new Date(
+                                              selectedMember.expiration_date
+                                            ).toLocaleString("en-US", {
+                                              month: "short",
+                                              day: "numeric",
+                                              year: "numeric",
+                                              hour: "numeric",
+                                              minute: "numeric",
+                                              hour12: true,
+                                            })
+                                          : "No Expiration"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-gray-300">No Membership</p>
+                              )}
+                            </div>
+
+                            {/* Payment History */}
+                            <div className="rounded-lg bg-charleston p-4">
+                              <h3 className="mb-4 text-lg font-medium text-light">
+                                Payment History
+                              </h3>
+                              {selectedMember.payments &&
+                              selectedMember.payments.length > 0 ? (
+                                <div className="space-y-4">
+                                  {selectedMember.payments.map((payment) => (
+                                    <a
+                                      key={payment.paymentId}
+                                      href={payment.invoiceUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block rounded-lg bg-eerieblack p-4 transition-colors duration-200 hover:bg-opacity-80"
+                                    >
+                                      <div className="mb-2 flex items-center justify-between">
+                                        <span className="text-sm font-semibold text-gray-300">
+                                          {payment.invoiceId}
+                                        </span>
+                                        <span
+                                          className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                            payment.status === "COMPLETED"
+                                              ? "bg-green-800 text-green-200"
+                                              : "bg-yellow-800 text-yellow-200"
+                                          }`}
+                                        >
+                                          {payment.status}
+                                        </span>
+                                      </div>
+                                      <div className="mb-1 flex items-center justify-between">
+                                        <span className="text-lg font-bold text-light">
+                                          ${payment.amount}
+                                        </span>
+                                        <span className="text-sm capitalize text-gray-400">
+                                          {payment.type}
+                                        </span>
+                                      </div>
+                                      <div className="text-xs text-gray-400">
+                                        {new Date(payment.created_at).toLocaleString(
+                                          "en-US",
+                                          {
+                                            month: "short",
+                                            day: "numeric",
+                                            year: "numeric",
+                                            hour: "numeric",
+                                            minute: "numeric",
+                                            hour12: true,
+                                          }
+                                        )}
+                                      </div>
+                                    </a>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-gray-300">
+                                  No payment history available
+                                </p>
+                              )}
+                            </div>
+
+                            {/* User Activities Section */}
+                            <div className="rounded-lg bg-charleston p-4">
+                              <h3 className="mb-4 text-lg font-medium text-light">
+                                Recent Activities
+                              </h3>
+                              {userActivities.length > 0 ? (
+                                <ActivityFeed activities={userActivities} />
+                              ) : (
+                                <p className="text-gray-300">
+                                  No recent activities available
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Remove Member Button */}
+                            <div className="mt-6">
+                              <button
+                                onClick={() =>
+                                  handleRemoveMember(
+                                    selectedMember.organizationmemberid,
+                                    selectedMember.userid,
+                                    selectedMember.role.role
+                                  )
+                                }
+                                className="w-full rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                              >
+                                Remove Member
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </Disclosure.Panel>
-                  </>
-                )}
-              </Disclosure>
+                    </div>
+                  </Dialog.Panel>
+                </Transition.Child>
+              </div>
             </div>
           </div>
-        </>
-      )}
+        </Dialog>
+      </Transition.Root>
     </div>
   );
 };
 
-export default NewsletterCreation;
+export default MembersTableAll;
