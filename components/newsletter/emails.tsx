@@ -5,8 +5,7 @@
 import React, { useState, Fragment, useMemo, useEffect } from "react";
 import { Email } from "@/types/email";
 import DataTable, { TableColumn, TableStyles } from "react-data-table-component";
-import dynamic from "next/dynamic";
-import { Disclosure } from "@headlessui/react";
+import { Disclosure, Switch } from "@headlessui/react"; // Imported Switch
 import {
   ChevronUpIcon,
   ChevronDownIcon,
@@ -18,8 +17,7 @@ import { check_permissions } from "@/lib/newsletter_actions";
 import { useUser } from "@/context/user_context";
 import Swal from "sweetalert2";
 import Preloader from "@/components/preloader";
-
-const RichTextEditor = dynamic(() => import("@mantine/rte"), { ssr: false });
+import DOMPurify from "dompurify";
 
 interface EmailsProps {
   sentEmails: Email[];
@@ -89,18 +87,94 @@ const customStyles: TableStyles = {
   },
 };
 
-const extractTextFromHtml = (html: string): string => {
-  if (!html) return "";
+// Helper Function to Convert CSS Color to RGB
+const cssColorToRgb = (color: string): { r: number; g: number; b: number } | null => {
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = color;
+  const computedColor = ctx.fillStyle;
 
-  // Create a temporary DOM element to leverage the browser's HTML parser
-  const tempDiv = document.createElement("div");
-  tempDiv.innerHTML = html;
-  const plainText = tempDiv.textContent || "";
+  // Parse the computed color
+  const match = computedColor.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (match) {
+    return { r: parseInt(match[1]), g: parseInt(match[2]), b: parseInt(match[3]) };
+  }
+  return null;
+};
 
-  // Replace multiple consecutive newlines (including \r\n) with a single newline
-  const normalizedText = plainText.replace(/(\r?\n){2,}/g, "\n");
+// Helper Function to Calculate Luminance
+const getLuminance = (r: number, g: number, b: number): number => {
+  const a = [r, g, b].map((v) => {
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+};
 
-  return normalizedText;
+// Function to Check if Background is Light
+const isBackgroundLight = (backgroundColor: string): boolean => {
+  const rgb = cssColorToRgb(backgroundColor);
+  if (!rgb) return false; // Default to dark if unable to parse
+  const luminance = getLuminance(rgb.r, rgb.g, rgb.b);
+  return luminance > 0.5; // Threshold for light vs dark
+};
+
+// Function to Adjust Text Colors Based on Backgrounds
+const adjustTextColors = (html: string): string => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+
+  // Default background color is dark (#1f1f1f)
+  const defaultBgColor = "rgb(31, 31, 31)";
+
+  const traverse = (element: HTMLElement, parentBgColor: string) => {
+    // Determine this element's background color from inline style
+    let bgColor = parentBgColor;
+
+    const inlineStyle = element.getAttribute("style");
+    if (inlineStyle) {
+      const bgMatch = inlineStyle.match(/background-color\s*:\s*([^;]+)/i);
+      if (bgMatch) {
+        bgColor = bgMatch[1].trim();
+      }
+    }
+
+    // Handle 'transparent' or 'inherit'
+    if (
+      !bgColor ||
+      bgColor.toLowerCase() === "transparent" ||
+      bgColor.toLowerCase() === "inherit"
+    ) {
+      bgColor = parentBgColor;
+    }
+
+    // Determine if background is light
+    const isLight = isBackgroundLight(bgColor);
+
+    // Set text color accordingly
+    if (isLight) {
+      element.style.color = "#000000"; // Dark text
+    } else {
+      element.style.color = "#FFFFFF"; // Light text
+    }
+
+    // Log the details for debugging
+    console.log(
+      `Element: <${element.tagName.toLowerCase()}>`,
+      `Background Color: ${bgColor}`,
+      `Is Light: ${isLight}`,
+      `Set Text Color: ${isLight ? "#000000" : "#FFFFFF"}`
+    );
+
+    // Traverse child elements
+    Array.from(element.children).forEach((child) => {
+      traverse(child as HTMLElement, bgColor);
+    });
+  };
+
+  traverse(doc.body, defaultBgColor);
+
+  return doc.body.innerHTML;
 };
 
 const Emails: React.FC<EmailsProps> = ({
@@ -118,6 +192,9 @@ const Emails: React.FC<EmailsProps> = ({
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [outgoingSearch, setOutgoingSearch] = useState("");
   const [incomingSearch, setIncomingSearch] = useState("");
+
+  // **New State Variable for Light Mode Toggle**
+  const [isLightMode, setIsLightMode] = useState(false);
 
   // Permission Check
   useEffect(() => {
@@ -202,11 +279,14 @@ const Emails: React.FC<EmailsProps> = ({
     },
     {
       name: "From",
-      selector: (row: Email) => row.from,
+      selector: (row: Email) => {
+        const emailMatch = row.from.match(/<(.+?)>/);
+        return emailMatch ? emailMatch[1] : row.from;
+      },
       sortable: true,
       id: "from",
       width: "200px",
-    },
+    },    
     {
       name: "Date",
       selector: (row: Email) => new Date(row.date).toLocaleString(),
@@ -249,8 +329,30 @@ const Emails: React.FC<EmailsProps> = ({
     );
   }, [incomingEmails, incomingSearch]);
 
+  // Sanitize and Adjust HTML Content
+  const processedHtml = useMemo(() => {
+    if (!selectedEmail) return "";
+
+    const rawHtml = selectedEmail.htmlContent || selectedEmail.body || "";
+    const sanitizedHtml = DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true } });
+
+    // Remove any appearance of the environment variable NEXT_PUBLIC_GMAIL_USER and any surrounding <>
+    const cleanedHtml = sanitizedHtml
+      .replace(new RegExp(`${process.env.NEXT_PUBLIC_GMAIL_USER}`, "g"), "")
+
+    if (isLightMode) {
+      // **Render Original HTML Without Adjustments (Light Mode)**
+      return cleanedHtml;
+    } else {
+      // **Adjust Text Colors Based on Background Colors (Dark Mode)**
+      const adjustedHtml = adjustTextColors(cleanedHtml);
+      return adjustedHtml;
+    }
+  }, [selectedEmail, isLightMode]);
+
   // Open Email Preview Modal
   const openEmailPreview = (email: Email) => {
+    console.log("Raw Email HTML Content:", email.htmlContent || email.body); // Log the email HTML
     setSelectedEmail(email);
     setIsPreviewOpen(true);
   };
@@ -414,26 +516,63 @@ const Emails: React.FC<EmailsProps> = ({
                     leaveFrom="opacity-100 translate-y-0 sm:scale-100"
                     leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
                   >
-                    <Dialog.Panel className="w-full max-w-4xl transform overflow-hidden rounded-lg bg-[#1f1f1f] text-left align-middle shadow-xl transition-all">
+                    {/* **Conditional Class Names Based on isLightMode** */}
+                    <Dialog.Panel
+                      className={classNames(
+                        "w-full max-w-4xl transform overflow-hidden rounded-lg shadow-xl transition-all",
+                        isLightMode ? "bg-white text-black" : "bg-[#1f1f1f] text-white"
+                      )}
+                    >
                       {/* Header */}
-                      <div className="flex items-center justify-between border-b border-gray-700 p-4">
+                      <div
+                        className={classNames(
+                          "flex items-center justify-between border-b p-4",
+                          isLightMode ? "border-gray-300" : "border-gray-700"
+                        )}
+                      >
                         <div className="flex items-center space-x-2">
                           <button
-                            className="text-gray-400 hover:text-white"
+                            className={classNames(
+                              "hover:text-gray-700",
+                              isLightMode ? "text-gray-700" : "text-gray-400"
+                            )}
                             onClick={() => setIsPreviewOpen(false)}
                           >
                             <ArrowLeftIcon className="h-5 w-5" />
                           </button>
-                          <Dialog.Title
-                            as="h3"
-                            className="text-lg font-semibold text-white"
-                          >
+                          <Dialog.Title as="h3" className="text-lg font-semibold">
                             {selectedEmail.subject}
                           </Dialog.Title>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-4">
+                          {/* **Toggle Switch for Light Mode** */}
+                          <Switch
+                            checked={isLightMode}
+                            onChange={setIsLightMode}
+                            className={`${
+                              isLightMode ? "bg-primary" : "bg-gray-500"
+                            } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2`}
+                          >
+                            <span
+                              className={`${
+                                isLightMode ? "translate-x-6" : "translate-x-1"
+                              } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+                            />
+                          </Switch>
+                          <label
+                            htmlFor="lightModeToggle"
+                            className={classNames(
+                              "text-sm",
+                              isLightMode ? "text-gray-700" : "text-gray-400"
+                            )}
+                          >
+                            View in Light Mode
+                          </label>
                           <button
-                            className="text-gray-400 hover:text-white"
+                            className={classNames(
+                              "hover:text-gray-700",
+                              isLightMode ? "text-gray-700" : "text-gray-400"
+                            )}
                             onClick={() => setIsPreviewOpen(false)}
                           >
                             <XMarkIcon className="h-5 w-5" />
@@ -441,34 +580,36 @@ const Emails: React.FC<EmailsProps> = ({
                         </div>
                       </div>
                       {/* Email Body */}
-                      <div className="space-y-4 p-6">
+                      <div className="space-y-4 p-6 text-left">
                         <div className="flex flex-col space-y-1">
                           {selectedEmail.from &&
                           organizationName &&
                           selectedEmail.from.includes(organizationName) ? (
-                            <span className="text-sm text-gray-400">
-                              To: {selectedEmail.to.join(", ")}
+                            <span className="text-sm">
+                              <strong>To:</strong> {selectedEmail.to.join(", ")}
                             </span>
                           ) : (
-                            <span className="text-sm text-gray-400">
-                              From: {selectedEmail.from}
+                            <span className="text-sm">
+                              <strong>From:</strong> {selectedEmail.from}
                             </span>
                           )}
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs">
                             {new Date(selectedEmail.date).toLocaleString()}
                           </span>
                         </div>
-                        {/* ### Step 2: Update Email Content Rendering to Use Plain Text ### */}
-                        <div className="whitespace-pre-wrap text-white">
-                          {selectedEmail.htmlContent
-                            ? extractTextFromHtml(selectedEmail.htmlContent)
-                            : selectedEmail.body}
-                        </div>
+                        {/* **Removed Notification Note** */}
+                        {/* **Securely Render Adjusted or Original HTML Content** */}
+                        <div
+                          className={`prose max-w-none ${
+                            isLightMode ? "" : "prose-invert"
+                          }`}
+                          dangerouslySetInnerHTML={{
+                            __html: processedHtml,
+                          }}
+                        ></div>
                         {selectedEmail.attachments.length > 0 && (
                           <div className="mt-6">
-                            <h4 className="text-md mb-2 font-semibold text-white">
-                              Attachments:
-                            </h4>
+                            <h4 className="text-md mb-2 font-semibold">Attachments:</h4>
                             <ul className="list-inside list-disc space-y-1">
                               {selectedEmail.attachments.map((attachment, index) => (
                                 <li key={index}>
@@ -485,16 +626,6 @@ const Emails: React.FC<EmailsProps> = ({
                             </ul>
                           </div>
                         )}
-                      </div>
-                      {/* Footer Actions */}
-                      <div className="flex justify-end border-t border-gray-700 p-4">
-                        <button
-                          type="button"
-                          className="hover:bg-primary-dark focus:ring-primary-light inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2"
-                          onClick={() => setIsPreviewOpen(false)}
-                        >
-                          Close
-                        </button>
                       </div>
                     </Dialog.Panel>
                   </Transition.Child>
