@@ -116,7 +116,6 @@ const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
   useEffect(() => {
     async function checkUserPermissions() {
       setCheckingPermission(true); // Start loading
-      console.log("Checking user permissions... ", user?.id, organizationId);
       try {
         const permission = await check_permissions(
           organizationId,
@@ -124,7 +123,6 @@ const NewsletterCreation: React.FC<NewsletterCreationProps> = ({
           user?.id || ""
         );
         setHasPermission(permission);
-        console.log("User has permission to send newsletters: ", permission);
       } catch (error) {
         console.error("Error checking permissions:", error);
         setHasPermission(false);

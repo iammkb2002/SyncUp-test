@@ -158,14 +158,6 @@ const adjustTextColors = (html: string): string => {
       element.style.color = "#FFFFFF"; // Light text
     }
 
-    // Log the details for debugging
-    console.log(
-      `Element: <${element.tagName.toLowerCase()}>`,
-      `Background Color: ${bgColor}`,
-      `Is Light: ${isLight}`,
-      `Set Text Color: ${isLight ? "#000000" : "#FFFFFF"}`
-    );
-
     // Traverse child elements
     Array.from(element.children).forEach((child) => {
       traverse(child as HTMLElement, bgColor);
@@ -200,7 +192,6 @@ const Emails: React.FC<EmailsProps> = ({
   useEffect(() => {
     async function checkUserPermissions() {
       setCheckingPermission(true); // Start loading
-      console.log("Checking user permissions... ", user?.id, organizationId);
       try {
         const permission = await check_permissions(
           organizationId,
@@ -208,7 +199,6 @@ const Emails: React.FC<EmailsProps> = ({
           user?.id || ""
         );
         setHasPermission(permission);
-        console.log("User has permission to view emails: ", permission);
       } catch (error) {
         console.error("Error checking permissions:", error);
         setHasPermission(false);
@@ -352,7 +342,6 @@ const Emails: React.FC<EmailsProps> = ({
 
   // Open Email Preview Modal
   const openEmailPreview = (email: Email) => {
-    console.log("Raw Email HTML Content:", email.htmlContent || email.body); // Log the email HTML
     setSelectedEmail(email);
     setIsPreviewOpen(true);
   };

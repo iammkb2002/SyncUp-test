@@ -229,6 +229,5 @@ export async function check_permissions(
     return null;
   }
 
-  console.log("Permissions check result:", data);
   return data;
 }
